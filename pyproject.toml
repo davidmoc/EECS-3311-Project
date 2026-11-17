@@ -1,0 +1,9 @@
+[project]
+name = "praxis"
+version = "0.1.0"
+description = "Marxist political research and learning platform (EECS 3311 course project)"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
