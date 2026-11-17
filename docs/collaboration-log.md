@@ -18,7 +18,7 @@ platform.openai.com.
 
 | Date | Claude Code tokens | Claude Code cost | OpenAI app cost | Work done |
 |---|---|---|---|---|
-| 2026-11-16 | | | | Design review, stack and scope decisions, foundation layers |
+| 2026-11-16 | 5.7m | $5.90 | $0 | Design review, stack and scope decisions, foundation layers |
 
 ## Interactions
 
