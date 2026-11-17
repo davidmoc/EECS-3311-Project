@@ -10,6 +10,16 @@ reviewed; where review has not happened yet, it says so.
 |---|---|---|---|
 | Claude Code (CLI) | Claude Fable 5.2 (`claude-fable-5-2`) | Design review, code generation, tests | _to be filled from `/cost` at the end of each session_ |
 
+### Cost per session
+
+Development cost comes from `/cost` in Claude Code at the end of each session.
+Application cost (the app's own OpenAI calls) comes from the Usage page on
+platform.openai.com.
+
+| Date | Claude Code tokens | Claude Code cost | OpenAI app cost | Work done |
+|---|---|---|---|---|
+| 2026-11-16 | | | | Design review, stack and scope decisions, foundation layers |
+
 ## Interactions
 
 ### 2026-11-16 — Review of Stage 1 design against Stage 2 requirements
