@@ -1,0 +1,48 @@
+# AI–Human Collaboration Log
+
+Running record for the Stage 2 report (sections 5 and 6). Entries are added as
+work happens. "Human contribution" records only what was actually decided or
+reviewed; where review has not happened yet, it says so.
+
+## AI tools used
+
+| Tool | LLM model | Purpose | Token / money cost |
+|---|---|---|---|
+| Claude Code (CLI) | Claude Fable 5.2 (`claude-fable-5-2`) | Design review, code generation, tests | _to be filled from `/cost` at the end of each session_ |
+
+## Interactions
+
+### 2026-11-16 — Review of Stage 1 design against Stage 2 requirements
+
+- **Task:** Understand what Stage 2 requires and whether the Stage 1 design is ready to implement.
+- **Input/Instruction:** "instructions/ contains the instructions I was given… Don't build anything yet, just examine."
+- **AI contribution:** Read the three instruction documents and the full Stage 1 proposal. Reported inconsistencies: F12 has two different names; section 4 cites an SD08 that does not exist; sequence diagrams use methods and types (`compareSources()`, `AgentResponse`, `ToolResult`, `LearningPath`) missing from the class diagram; SD01 bypasses `ResearchCommand.execute()`.
+- **Human contribution:** Approved carrying these fixes into the implementation as documented design changes.
+- **Outcome:** List of design changes to record in the Stage 2 report.
+
+### 2026-11-16 — Technology stack
+
+- **Task:** Choose the implementation language and libraries.
+- **Input/Instruction:** "What tech stack would you recommend?" followed by "would Go instead of Python be better or worse, assuming I know Go but not Python."
+- **AI contribution:** Checked the KUMA repository (Stage 3 testing tool) and found it is a Python SDK that calls the agent in-process. Recommended Python, PySide6 GUI, Typer CLI, SQLite, OpenAI behind an adapter. Argued Go was a worse fit (no class inheritance for the UML design, KUMA would need a bridge) while noting its advantage of developer familiarity.
+- **Human contribution:** Raised the Go alternative; confirmed Java is not required; chose Python, an OpenAI mini-tier model, and a single local user with no accounts.
+- **Outcome:** Stack fixed as recommended.
+
+### 2026-11-16 — Scope
+
+- **Task:** Decide how to fit 15 designed features into the remaining time.
+- **AI contribution:** Proposed three tiers: eight features at full depth (F01, F03, F04, F05, F06, F10, F13, F15), five lighter features reusing the same services (F02, F07, F08, F09, F11), and two to decide later (F12, F14).
+- **Human contribution:** Accepted the tiers; set the working cadence of several small commits per day.
+- **Outcome:** Build order: shared foundation first, then features by tier.
+
+### 2026-11-16 — Foundation layers
+
+- **Task:** Build the layers every feature depends on.
+- **AI contribution:** Wrote configuration loading, the document model, the `LLMClient` interface with `OpenAILLMAdapter`, the SQLite `DocumentRepository`, and the tool layer (`Tool`, `ToolManager`, `ToolFactory`, `LibrarySearchTool`), with 64 automated tests.
+- **Design changes from Stage 1 introduced here:**
+  - `ToolResult`, `LLMResponse` and `Prompt` added as explicit classes (used but undefined in Stage 1).
+  - `Citation` carries the document title and author so it can be displayed on its own.
+  - `LibrarySearchTool` reads from `DocumentRepository` for now; Stage 1 routes it through `DocumentProvider`.
+  - `ToolManager` returns failures as `ToolResult` values instead of raising, so the agent can re-plan.
+- **Human contribution:** _Code review pending._
+- **Outcome:** Committed on branch `stage2`.
