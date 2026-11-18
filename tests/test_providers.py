@@ -1,0 +1,134 @@
+import pytest
+
+from praxis.documents import Book
+from praxis.library import (
+    ProviderError,
+    PublicTextArchiveAdapter,
+    SourceReference,
+    clean_text,
+)
+
+RAW_BOOK = "﻿" + "\r\n".join(
+    [
+        "The Project Gutenberg eBook of The Communist Manifesto",
+        "",
+        "Title: The Communist Manifesto",
+        "",
+        "Author: Karl Marx and Friedrich Engels",
+        "",
+        "*** START OF THE PROJECT GUTENBERG EBOOK THE COMMUNIST MANIFESTO ***",
+        "",
+        "A spectre is haunting Europe--the spectre",
+        "of Communism.",
+        "",
+        "",
+        "The history of all hitherto existing society",
+        "is the history of class struggles.",
+        "*** END OF THE PROJECT GUTENBERG EBOOK THE COMMUNIST MANIFESTO ***",
+        "",
+        "Licence text that must not appear in the library.",
+    ]
+)
+
+
+class FakeFetcher:
+    def __init__(self, text=RAW_BOOK, error=None):
+        self.text, self.error, self.urls = text, error, []
+
+    def __call__(self, url):
+        self.urls.append(url)
+        if self.error:
+            raise self.error
+        return self.text
+
+
+def test_clean_text_drops_licence_and_joins_wrapped_lines():
+    assert clean_text(RAW_BOOK) == (
+        "A spectre is haunting Europe--the spectre of Communism.\n\n"
+        "The history of all hitherto existing society is the history of "
+        "class struggles."
+    )
+
+
+def test_cleaned_text_splits_into_one_passage_per_paragraph():
+    book = Book(title="Manifesto", author="Marx", text=clean_text(RAW_BOOK))
+
+    passages = book.passages()
+
+    assert [p.locator for p in passages] == ["¶1", "¶2"]
+    assert passages[1].text.startswith("The history of all")
+
+
+def test_clean_text_drops_old_style_footer_line():
+    raw = "*** START OF THIS PROJECT GUTENBERG EBOOK X ***\nBody.\n\nEnd of Project Gutenberg's X, by Y\n\nmore licence"
+
+    assert clean_text(raw) == "Body."
+
+
+def test_start_marker_wrapped_onto_two_lines_is_fully_removed():
+    raw = "*** START OF THIS PROJECT GUTENBERG EBOOK REVOLUTION AND\nCOUNTER-REVOLUTION***\n\nBody."
+
+    assert clean_text(raw) == "Body."
+
+
+def test_clean_text_without_markers_keeps_everything():
+    assert clean_text("one\ntwo\n\nthree") == "one two\n\nthree"
+
+
+@pytest.mark.parametrize(
+    ("source_id", "path"),
+    [
+        ("61", "/6/61/61-0.txt"),
+        ("1346", "/1/3/4/1346/1346-0.txt"),
+        ("7", "/0/7/7-0.txt"),
+    ],
+)
+def test_mirror_url_layout(source_id, path):
+    adapter = PublicTextArchiveAdapter(base_url="https://mirror.test/")
+
+    assert adapter.url_for(source_id) == "https://mirror.test" + path
+
+
+def test_non_numeric_id_is_rejected_before_any_download():
+    fetcher = FakeFetcher()
+    adapter = PublicTextArchiveAdapter(fetcher=fetcher)
+
+    with pytest.raises(ProviderError):
+        adapter.fetch(SourceReference("../etc/passwd"))
+    assert fetcher.urls == []
+
+
+def test_fetch_builds_a_reproducible_book_from_header_metadata():
+    adapter = PublicTextArchiveAdapter(fetcher=FakeFetcher())
+
+    book = adapter.fetch(SourceReference("61", topics=("class struggle",)))
+
+    assert isinstance(book, Book)
+    assert book.title == "The Communist Manifesto"
+    assert book.author == "Karl Marx and Friedrich Engels"
+    assert book.topics == ("class struggle",)
+    assert book.source_url == "https://www.gutenberg.org/ebooks/61"
+    assert book.can_reproduce() and book.downloadable
+    assert "Licence text" not in book.text
+
+
+def test_reference_metadata_overrides_the_header():
+    adapter = PublicTextArchiveAdapter(fetcher=FakeFetcher())
+
+    book = adapter.fetch(SourceReference("61", title="Manifesto", author="Marx"))
+
+    assert (book.title, book.author) == ("Manifesto", "Marx")
+
+
+def test_download_failure_surfaces_as_provider_error():
+    adapter = PublicTextArchiveAdapter(fetcher=FakeFetcher(error=ProviderError("down")))
+
+    with pytest.raises(ProviderError):
+        adapter.fetch(SourceReference("61"))
+
+
+def test_book_without_any_title_is_rejected():
+    adapter = PublicTextArchiveAdapter(fetcher=FakeFetcher(text="no header at all"))
+
+    with pytest.raises(ProviderError):
+        adapter.fetch(SourceReference("99"))
