@@ -14,7 +14,8 @@ from praxis.documents import Document
 from praxis.library.providers import DocumentProvider, ProviderError, SourceReference
 from praxis.persistence import DocumentRepository
 
-DEFAULT_CATALOGUE = Path("data/library/catalogue.json")
+# Resolved from the package location so it works from any working directory.
+DEFAULT_CATALOGUE = Path(__file__).resolve().parents[2] / "data" / "library" / "catalogue.json"
 
 
 class LibraryError(Exception):
