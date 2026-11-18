@@ -8,7 +8,7 @@ reviewed; where review has not happened yet, it says so.
 
 | Tool | LLM model | Purpose | Token / money cost |
 |---|---|---|---|
-| Claude Code (CLI) | Claude Fable 5.2 (`claude-fable-5-2`) | Design review, code generation, tests | _to be filled from `/cost` at the end of each session_ |
+| Claude Code (CLI) | Claude Fable 5.2 (`claude-fable-5-2`) on 2026-11-16; Claude Opus 5.5 (`claude-opus-5-5`) on 2026-11-18 | Design review, code generation, tests | _to be filled from `/cost` at the end of each session_ |
 
 ### Cost per session
 
@@ -19,6 +19,7 @@ platform.openai.com.
 | Date | Claude Code tokens | Claude Code cost | OpenAI app cost | Work done |
 |---|---|---|---|---|
 | 2026-11-16 | 5.7m | $5.90 | $0 | Design review, stack and scope decisions, foundation layers |
+| 2026-11-18 | _from `/cost`_ | _from `/cost`_ | $0 | Library, reader model, workspace, CLI |
 
 ## Interactions
 
@@ -56,3 +57,18 @@ platform.openai.com.
   - `ToolManager` returns failures as `ToolResult` values instead of raising, so the agent can re-plan.
 - **Human contribution:** _Code review pending._
 - **Outcome:** Committed on branch `stage2`.
+
+### 2026-11-18 — Reading library, reader model, workspace and CLI
+
+- **Task:** Implement F05, F13 and F15 end to end with a command-line interface.
+- **Input/Instruction:** "Let's continue building the eecs 3311 project."
+- **AI contribution:** Chose this slice from the scope tiers. Wrote `DocumentProvider` with `PublicTextArchiveAdapter` (Project Gutenberg), `LibraryService`, a bundled sample library of five public-domain texts, the reader model (`ReaderProfile`, `KnowledgeProfile`, `InterestProfile`, `ReadingHistory`), `ReaderProfileService`, the Observer pair `LearningEventBus`/`ReaderModelUpdater`, `Workspace`/`SavedItem`/`WorkspaceService`, their SQLite repositories, and the Typer CLI (`library`, `profile`, `workspace` commands). 174 automated tests.
+- **Problems met:** Project Gutenberg's main site was down for maintenance, so texts were fetched from the `gutenberg.pglaf.org` mirror and committed to `data/library/` so seeding works offline. Two AI-written tests had wrong expectations (a phrase quoted from a different edition of the Manifesto; a miscounted topic) and were corrected against the real data.
+- **Design changes from Stage 1 introduced here:**
+  - `LibraryService` imports through `DocumentProvider`; `LibrarySearchTool` still reads `DocumentRepository` directly.
+  - The reader model records whether each knowledge level was inferred or stated by the reader; stated levels are never overridden by inference (supports F13's "correct inaccurate assessments").
+  - `ActivityObserver.onActivity()` is implemented as `on_activity()`; event types `DocumentRead`, `TopicResearched` and `PrerequisiteMarkedKnown` were added (Stage 1 left events untyped).
+  - `SavedItem` stores a content snapshot so saved material survives the source disappearing (F15 error case). F15 had no sequence diagram in Stage 1 (section 4 cites a nonexistent SD08).
+  - `Application` (`praxis/app.py`) added as a composition root shared by the CLI and the future GUI.
+- **Human contribution:** _Code review pending._
+- **Outcome:** Ten commits pushed to `main`.
