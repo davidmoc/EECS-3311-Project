@@ -24,12 +24,15 @@ from praxis.documents import Document
 from praxis.library import LibraryError, SourceReference
 from praxis.reader_model import ExplanationDepth, KnowledgeLevel, ReaderProfile
 from praxis.reader_model.events import DocumentRead
+from praxis.workspace import SavedItem, SavedItemKind
 
 app = typer.Typer(help="Praxis: Marxist political research and learning.", no_args_is_help=True)
 library_app = typer.Typer(help="Browse, search and read the text library (F05).", no_args_is_help=True)
 profile_app = typer.Typer(help="Inspect and correct your reader model (F13).", no_args_is_help=True)
+workspace_app = typer.Typer(help="Save and return to texts, passages and notes (F15).", no_args_is_help=True)
 app.add_typer(library_app, name="library")
 app.add_typer(profile_app, name="profile")
+app.add_typer(workspace_app, name="workspace")
 
 # Tests replace this to run commands against an in-memory database.
 application_factory = build_application
@@ -285,6 +288,128 @@ def profile_reset(
     with session() as application:
         application.profiles.reset()
     typer.echo("Profile erased.")
+
+
+# --- workspace (F15) ---------------------------------------------------------
+
+
+def _print_items(items: list[SavedItem], empty_message: str) -> None:
+    if not items:
+        typer.echo(empty_message)
+        return
+    for item in items:
+        typer.echo(f"{str(item.id)[:8]}  [{item.kind.value}] {item.title}")
+        details = [f"saved {item.saved_at:%Y-%m-%d %H:%M}"]
+        if item.tags:
+            details.append("tags: " + ", ".join(item.tags))
+        typer.echo("          " + " | ".join(details))
+        if item.note:
+            typer.echo(f"          note: {item.note}")
+
+
+@workspace_app.command("list")
+def workspace_list(
+    kind: Annotated[Optional[SavedItemKind], typer.Option(help="Only items of this kind.")] = None,
+) -> None:
+    """List saved items, newest first."""
+    with session() as application:
+        items = application.workspace.get_workspace().newest_first(kind)
+    _print_items(items, "Your workspace is empty. Save texts with `praxis workspace save-text`.")
+
+
+@workspace_app.command("save-text")
+def workspace_save_text(
+    document_id: Annotated[str, typer.Argument(help="Library id or prefix.")],
+    note: Annotated[str, typer.Option(help="Your note about it.")] = "",
+    tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t", help="Tag; repeatable.")] = None,
+) -> None:
+    """Save a library text to your workspace."""
+    with session() as application:
+        document = application.library.get_document(document_id)
+        item = application.workspace.save_document(document, note, tuple(tag or ()))
+    typer.echo(f"Saved {item.title} [{str(item.id)[:8]}]")
+
+
+@workspace_app.command("save-passage")
+def workspace_save_passage(
+    document_id: Annotated[str, typer.Argument(help="Library id or prefix.")],
+    paragraph: Annotated[int, typer.Argument(help="Paragraph number, as shown by `library read` (¶n).", min=1)],
+    note: Annotated[str, typer.Option(help="Your note about it.")] = "",
+    tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t", help="Tag; repeatable.")] = None,
+) -> None:
+    """Save one paragraph of a text, with its citation."""
+    with session() as application:
+        document = application.library.get_document(document_id)
+        passages = document.passages()
+        if paragraph > len(passages):
+            raise ValueError(f"“{document.title}” has only {len(passages)} paragraphs.")
+        item = application.workspace.save_passage(
+            document, passages[paragraph - 1], note, tuple(tag or ())
+        )
+    typer.echo(f"Saved {item.title} [{str(item.id)[:8]}]")
+
+
+@workspace_app.command("note")
+def workspace_note(
+    title: Annotated[str, typer.Argument(help="Short title.")],
+    text: Annotated[str, typer.Argument(help="The note itself.")] = "",
+    tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t", help="Tag; repeatable.")] = None,
+) -> None:
+    """Write a free-standing note."""
+    with session() as application:
+        item = application.workspace.add_note(title, text, tuple(tag or ()))
+    typer.echo(f"Saved note [{str(item.id)[:8]}]")
+
+
+@workspace_app.command("search")
+def workspace_search(query: Annotated[str, typer.Argument(help="Words to find.")]) -> None:
+    """Search titles, content, notes and tags of saved items."""
+    with session() as application:
+        items = application.workspace.search(query)
+    _print_items(items, f"Nothing saved matches '{query}'.")
+
+
+@workspace_app.command("open")
+def workspace_open(item_id: Annotated[str, typer.Argument(help="Item id or prefix.")]) -> None:
+    """Show a saved item and how to continue from it."""
+    with session() as application:
+        item = application.workspace.get_item(item_id)
+        document_id = application.workspace.document_id_of(item)
+        paragraph = application.workspace.paragraph_of(item)
+        still_available = False
+        if document_id is not None:
+            try:
+                application.library.get_document(document_id)
+                still_available = True
+            except LibraryError:
+                pass
+        progress = (
+            application.profiles.get_profile().history.get(document_id) if document_id else None
+        )
+
+    typer.secho(f"[{item.kind.value}] {item.title}", bold=True)
+    if item.content:
+        typer.echo(textwrap.fill(item.content, width=88))
+    if item.note:
+        typer.echo(f"\nNote: {item.note}")
+    if document_id is None:
+        return
+    if not still_available:
+        typer.secho(
+            "\nThe original text is no longer in the library; the saved copy above is what remains.",
+            fg=typer.colors.YELLOW,
+        )
+        return
+    resume_at = paragraph or (progress.furthest_paragraph + 1 if progress and not progress.completed else 1)
+    typer.echo(f"\nContinue reading: praxis library read {str(document_id)[:8]} --start {resume_at}")
+
+
+@workspace_app.command("remove")
+def workspace_remove(item_id: Annotated[str, typer.Argument(help="Item id or prefix.")]) -> None:
+    """Remove a saved item."""
+    with session() as application:
+        item = application.workspace.remove_item(item_id)
+    typer.echo(f"Removed {item.title}.")
 
 
 def main() -> None:

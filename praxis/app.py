@@ -20,10 +20,12 @@ from praxis.persistence import (
     Database,
     SQLDocumentRepository,
     SQLReaderProfileRepository,
+    SQLWorkspaceRepository,
 )
 from praxis.reader_model.events import LearningEventBus
 from praxis.reader_model.service import ReaderProfileService
 from praxis.reader_model.updater import ReaderModelUpdater
+from praxis.workspace.service import WorkspaceService
 
 
 @dataclass
@@ -33,6 +35,7 @@ class Application:
     library: LibraryService
     profiles: ReaderProfileService
     events: LearningEventBus
+    workspace: WorkspaceService
     # False when the caller passed in a database it will close itself.
     owns_database: bool = True
     _closed: bool = field(default=False, repr=False)
@@ -60,6 +63,7 @@ def build_application(
         library=library,
         profiles=profiles,
         events=events,
+        workspace=WorkspaceService(SQLWorkspaceRepository(database)),
         owns_database=owns_database,
     )
 
