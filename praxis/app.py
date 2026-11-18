@@ -16,7 +16,14 @@ from praxis.library import (
     PublicTextArchiveAdapter,
     directory_fetcher,
 )
-from praxis.persistence import Database, SQLDocumentRepository
+from praxis.persistence import (
+    Database,
+    SQLDocumentRepository,
+    SQLReaderProfileRepository,
+)
+from praxis.reader_model.events import LearningEventBus
+from praxis.reader_model.service import ReaderProfileService
+from praxis.reader_model.updater import ReaderModelUpdater
 
 
 @dataclass
@@ -24,6 +31,8 @@ class Application:
     settings: Settings
     database: Database
     library: LibraryService
+    profiles: ReaderProfileService
+    events: LearningEventBus
     # False when the caller passed in a database it will close itself.
     owns_database: bool = True
     _closed: bool = field(default=False, repr=False)
@@ -42,10 +51,15 @@ def build_application(
     database = database or Database(settings.database_path)
     documents = SQLDocumentRepository(database)
     library = LibraryService(documents, PublicTextArchiveAdapter())
+    profiles = ReaderProfileService(SQLReaderProfileRepository(database))
+    events = LearningEventBus()
+    events.subscribe(ReaderModelUpdater(profiles))
     return Application(
         settings=settings,
         database=database,
         library=library,
+        profiles=profiles,
+        events=events,
         owns_database=owns_database,
     )
 

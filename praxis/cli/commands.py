@@ -3,37 +3,55 @@
 Each command is a thin controller: it parses arguments, calls a service from
 the shared ``Application``, and prints the result. No business logic here.
 
-Python note: Typer reads each function's parameters and type hints to build
+Python notes: Typer reads each function's parameters and type hints to build
 the command's arguments and options, so the signatures below *are* the CLI.
+``with session() as application:`` opens the application, runs the block,
+and always closes it again, even when the block fails (like Go's ``defer``).
 """
 
 from __future__ import annotations
 
 import textwrap
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, NoReturn, Optional
 
 import typer
 
 from praxis.app import Application, build_application, bundled_library_service
 from praxis.documents import Document
 from praxis.library import LibraryError, SourceReference
+from praxis.reader_model import ExplanationDepth, KnowledgeLevel, ReaderProfile
+from praxis.reader_model.events import DocumentRead
 
 app = typer.Typer(help="Praxis: Marxist political research and learning.", no_args_is_help=True)
 library_app = typer.Typer(help="Browse, search and read the text library (F05).", no_args_is_help=True)
+profile_app = typer.Typer(help="Inspect and correct your reader model (F13).", no_args_is_help=True)
 app.add_typer(library_app, name="library")
+app.add_typer(profile_app, name="profile")
 
 # Tests replace this to run commands against an in-memory database.
 application_factory = build_application
 
+# Errors whose message is meant for the user, not a stack trace.
+USER_ERRORS = (LibraryError, ValueError)
 
-def _open() -> Application:
-    return application_factory()
 
-
-def _fail(message: str) -> None:
+def _fail(message: str) -> NoReturn:
     typer.secho(f"Error: {message}", fg=typer.colors.RED, err=True)
     raise typer.Exit(code=1)
+
+
+@contextmanager
+def session() -> Iterator[Application]:
+    application = application_factory()
+    try:
+        yield application
+    except USER_ERRORS as exc:
+        _fail(str(exc))
+    finally:
+        application.close()
 
 
 def _short_id(document: Document) -> str:
@@ -51,19 +69,17 @@ def _print_documents(documents: list[Document], empty_message: str) -> None:
             typer.echo(f"          topics: {', '.join(document.topics)}")
 
 
+# --- library (F05) -----------------------------------------------------------
+
+
 @library_app.command("seed")
 def library_seed(
     online: Annotated[bool, typer.Option(help="Download from Project Gutenberg instead of the bundled copies.")] = False,
 ) -> None:
     """Fill the library with the texts listed in the bundled catalogue."""
-    application = _open()
-    try:
+    with session() as application:
         library = application.library if online else bundled_library_service(application)
         report = library.import_catalogue()
-    except LibraryError as exc:
-        _fail(str(exc))
-    finally:
-        application.close()
     for document in report.imported:
         typer.echo(f"Imported {document.title}")
     for source_id, reason in report.failures:
@@ -77,15 +93,10 @@ def library_import(
     topic: Annotated[Optional[list[str]], typer.Option("--topic", "-t", help="Topic tag; repeatable.")] = None,
 ) -> None:
     """Download one public-domain book from Project Gutenberg."""
-    application = _open()
-    try:
+    with session() as application:
         document = application.library.import_document(
             SourceReference(gutenberg_id, topics=tuple(topic or ()))
         )
-    except LibraryError as exc:
-        _fail(str(exc))
-    finally:
-        application.close()
     typer.echo(f"Imported {document.title} [{_short_id(document)}]")
 
 
@@ -94,11 +105,8 @@ def library_search(
     query: Annotated[str, typer.Argument(help="Words to find in title, author, topics or text.")],
 ) -> None:
     """Search the library."""
-    application = _open()
-    try:
+    with session() as application:
         results = application.library.search(query)
-    finally:
-        application.close()
     _print_documents(results, f"No texts match '{query}'. Try fewer or broader words.")
 
 
@@ -107,13 +115,9 @@ def library_browse(
     topic: Annotated[Optional[str], typer.Option("--topic", "-t", help="Only texts with this topic.")] = None,
 ) -> None:
     """List texts, optionally filtered by topic."""
-    application = _open()
-    try:
-        library = application.library
-        documents = library.browse(topic)
-        empty = library.is_empty()
-    finally:
-        application.close()
+    with session() as application:
+        empty = application.library.is_empty()
+        documents = application.library.browse(topic)
     if empty:
         typer.echo("The library is empty. Run `praxis library seed` to add the sample texts.")
         return
@@ -123,11 +127,8 @@ def library_browse(
 @library_app.command("topics")
 def library_topics() -> None:
     """List topics and how many texts each has."""
-    application = _open()
-    try:
+    with session() as application:
         topics = application.library.topics()
-    finally:
-        application.close()
     for name, count in topics:
         typer.echo(f"{count:3}  {name}")
 
@@ -139,17 +140,15 @@ def library_read(
     count: Annotated[int, typer.Option(help="How many paragraphs to show.", min=1)] = 10,
     find: Annotated[Optional[str], typer.Option(help="Show only paragraphs containing these words.")] = None,
 ) -> None:
-    """Read a text paragraph by paragraph."""
-    application = _open()
-    try:
+    """Read a text paragraph by paragraph. Progress is recorded in your profile."""
+    with session() as application:
         document = application.library.get_document(document_id)
-    except LibraryError as exc:
-        _fail(str(exc))
-    finally:
-        application.close()
+        passages = document.find_passages(find) if find else document.passages()
+        shown = passages[start - 1 : start - 1 + count]
+        if shown and not find:
+            # Reading in order counts as progress; keyword lookups do not.
+            application.events.publish(DocumentRead(document, start - 1 + len(shown)))
 
-    passages = document.find_passages(find) if find else document.passages()
-    shown = passages[start - 1 : start - 1 + count]
     typer.secho(f"{document.title} — {document.author}", bold=True)
     typer.echo(f"Source: {document.source_url or 'unknown'} | Licence: {document.license or 'unknown'}\n")
     if not shown:
@@ -170,14 +169,122 @@ def library_download(
     to: Annotated[Path, typer.Option(help="Folder to save into.")] = Path("downloads"),
 ) -> None:
     """Save a public-domain text as a .txt file."""
-    application = _open()
-    try:
+    with session() as application:
         path = application.library.download(document_id, to)
-    except LibraryError as exc:
-        _fail(str(exc))
-    finally:
-        application.close()
     typer.echo(f"Saved to {path}")
+
+
+# --- reader profile (F13) ----------------------------------------------------
+
+_LEVELS = {level.name.lower(): level for level in KnowledgeLevel}
+
+
+def _parse_level(name: str) -> KnowledgeLevel:
+    try:
+        return _LEVELS[name.strip().lower()]
+    except KeyError:
+        raise ValueError(f"Level must be one of: {', '.join(_LEVELS)}.") from None
+
+
+def _print_profile(profile: ReaderProfile) -> None:
+    if profile.is_sparse:
+        typer.echo("Nothing is known about you yet. Read, research, or add interests to build your profile.\n")
+    typer.secho("Knowledge", bold=True)
+    for area in sorted(profile.knowledge.areas.values(), key=lambda a: a.topic):
+        origin = "you said" if not area.is_inferred else f"inferred from {area.evidence} activit{'y' if area.evidence == 1 else 'ies'}"
+        typer.echo(f"  {area.topic}: {area.level.name.lower()} ({origin})")
+    typer.secho("Interests", bold=True)
+    for topic in profile.interests.top(10):
+        typer.echo(f"  {topic}")
+    typer.secho("Reading", bold=True)
+    for record in profile.history.recent():
+        status = "finished" if record.completed else f"{record.progress:.0%}"
+        typer.echo(f"  {record.title}: {status}")
+    typer.secho("Preferences", bold=True)
+    typer.echo(f"  explanation depth: {profile.explanation_depth.value}")
+    typer.echo(f"  personalization: {'on' if profile.personalization_enabled else 'off'}")
+    if profile.background:
+        typer.echo(f"  background: {profile.background}")
+
+
+@profile_app.command("show")
+def profile_show() -> None:
+    """Show everything the system believes about you, and where it came from."""
+    with session() as application:
+        profile = application.profiles.get_profile()
+    _print_profile(profile)
+
+
+@profile_app.command("know")
+def profile_know(
+    topic: Annotated[str, typer.Argument(help="Topic, e.g. 'surplus value'.")],
+    level: Annotated[str, typer.Argument(help="none, introductory, intermediate or advanced.")],
+) -> None:
+    """State your level on a topic. Overrides anything inferred."""
+    with session() as application:
+        parsed = _parse_level(level)
+        application.profiles.correct_knowledge_assessment(topic, parsed)
+    typer.echo(f"Recorded: {topic.strip().lower()} = {parsed.name.lower()} (stated by you).")
+
+
+@profile_app.command("forget")
+def profile_forget(topic: Annotated[str, typer.Argument(help="Topic to remove from your knowledge.")]) -> None:
+    """Remove a knowledge assessment."""
+    with session() as application:
+        removed = application.profiles.remove_knowledge_assessment(topic)
+    typer.echo("Removed." if removed else f"No assessment for '{topic}'.")
+
+
+@profile_app.command("interest")
+def profile_interest(
+    topic: Annotated[str, typer.Argument(help="Topic of interest.")],
+    remove: Annotated[bool, typer.Option("--remove", help="Remove instead of add; it will not be re-inferred.")] = False,
+) -> None:
+    """Add or remove an interest."""
+    with session() as application:
+        if remove:
+            removed = application.profiles.remove_interest(topic)
+            message = "Removed." if removed else "Not an interest; it will not be inferred in future."
+        else:
+            application.profiles.add_interest(topic)
+            message = "Added."
+    typer.echo(message)
+
+
+@profile_app.command("depth")
+def profile_depth(depth: Annotated[ExplanationDepth, typer.Argument(help="How detailed explanations should be.")]) -> None:
+    """Set how detailed explanations should be."""
+    with session() as application:
+        application.profiles.set_explanation_depth(depth)
+    typer.echo(f"Explanation depth set to {depth.value}.")
+
+
+@profile_app.command("personalize")
+def profile_personalize(enabled: Annotated[bool, typer.Argument(help="true or false.")]) -> None:
+    """Turn personalization on or off."""
+    with session() as application:
+        application.profiles.set_personalization(enabled)
+    typer.echo(f"Personalization {'on' if enabled else 'off'}.")
+
+
+@profile_app.command("background")
+def profile_background(text: Annotated[str, typer.Argument(help="Anything you want the agent to know about you.")]) -> None:
+    """Tell the agent about your background in your own words."""
+    with session() as application:
+        application.profiles.set_background(text)
+    typer.echo("Background saved.")
+
+
+@profile_app.command("reset")
+def profile_reset(
+    yes: Annotated[bool, typer.Option("--yes", help="Confirm without asking.")] = False,
+) -> None:
+    """Forget everything known about you."""
+    if not yes and not typer.confirm("Erase your whole reader profile?"):
+        raise typer.Exit()
+    with session() as application:
+        application.profiles.reset()
+    typer.echo("Profile erased.")
 
 
 def main() -> None:
