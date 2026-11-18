@@ -4,6 +4,7 @@ from praxis.persistence.profiles import (
     ReaderProfileRepository,
     SQLReaderProfileRepository,
 )
+from praxis.persistence.workspaces import SQLWorkspaceRepository, WorkspaceRepository
 
 __all__ = [
     "Database",
@@ -11,4 +12,6 @@ __all__ = [
     "ReaderProfileRepository",
     "SQLDocumentRepository",
     "SQLReaderProfileRepository",
+    "SQLWorkspaceRepository",
+    "WorkspaceRepository",
 ]

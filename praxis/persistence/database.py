@@ -25,6 +25,17 @@ CREATE TABLE IF NOT EXISTS reader_profile (
     id   INTEGER PRIMARY KEY CHECK (id = 1),
     data TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS saved_items (
+    id        TEXT PRIMARY KEY,
+    kind      TEXT NOT NULL,
+    title     TEXT NOT NULL,
+    reference TEXT NOT NULL,
+    content   TEXT NOT NULL,
+    note      TEXT NOT NULL,
+    tags      TEXT NOT NULL,
+    saved_at  TEXT NOT NULL
+);
 """
 
 
