@@ -19,6 +19,12 @@ CREATE TABLE IF NOT EXISTS documents (
     topics           TEXT NOT NULL,
     outlet           TEXT NOT NULL DEFAULT ''
 );
+
+-- Single local user, so there is exactly one profile row (id = 1).
+CREATE TABLE IF NOT EXISTS reader_profile (
+    id   INTEGER PRIMARY KEY CHECK (id = 1),
+    data TEXT NOT NULL
+);
 """
 
 
