@@ -1,0 +1,37 @@
+[
+  {
+    "source_id": "61",
+    "title": "The Communist Manifesto",
+    "author": "Karl Marx and Friedrich Engels",
+    "publication_date": "1848-02-21",
+    "topics": ["class struggle", "capitalism", "bourgeoisie", "proletariat", "communism"]
+  },
+  {
+    "source_id": "17306",
+    "title": "The Condition of the Working-Class in England in 1844",
+    "author": "Friedrich Engels",
+    "publication_date": "1845-01-01",
+    "topics": ["working class", "industrial revolution", "capitalism", "england", "history"]
+  },
+  {
+    "source_id": "1346",
+    "title": "The Eighteenth Brumaire of Louis Bonaparte",
+    "author": "Karl Marx",
+    "publication_date": "1852-01-01",
+    "topics": ["historical materialism", "state", "class struggle", "france", "history"]
+  },
+  {
+    "source_id": "32966",
+    "title": "Revolution and Counter-Revolution, or Germany in 1848",
+    "author": "Karl Marx and Friedrich Engels",
+    "publication_date": "1852-01-01",
+    "topics": ["revolution", "germany", "1848", "bourgeoisie", "history"]
+  },
+  {
+    "source_id": "35232",
+    "title": "A Letter to American Workingmen",
+    "author": "V. I. Lenin",
+    "publication_date": "1918-08-20",
+    "topics": ["imperialism", "russian revolution", "war", "working class"]
+  }
+]

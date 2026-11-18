@@ -13,6 +13,9 @@ import urllib.request
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
+from uuid import NAMESPACE_URL, uuid5
 
 from praxis.documents import Book, Document
 
@@ -23,7 +26,7 @@ GUTENBERG_LICENSE = "Public domain (Project Gutenberg)"
 _START = re.compile(r"^\*\*\* ?START OF (THE|THIS) PROJECT GUTENBERG[^*]*\*\*\*", re.M)
 _END = re.compile(r"^\*\*\* ?END OF (THE|THIS) PROJECT GUTENBERG[^*]*\*\*\*", re.M)
 _OLD_END = re.compile(r"^End of (the )?Project Gutenberg", re.M | re.I)
-_HEADER_FIELD =re.compile(r"^(Title|Author):\s*(.+)$", re.M)
+_HEADER_FIELD = re.compile(r"^(Title|Author):\s*(.+)$", re.M)
 
 
 class ProviderError(Exception):
@@ -38,6 +41,7 @@ class SourceReference:
     topics: tuple[str, ...] = ()
     title: str = ""
     author: str = ""
+    publication_date: date | None = None
 
 
 class DocumentProvider(ABC):
@@ -48,6 +52,19 @@ class DocumentProvider(ABC):
 
 
 Fetcher = Callable[[str], str]
+
+
+def directory_fetcher(directory: Path | str) -> Fetcher:
+    """Serve book files saved locally as ``<number>.txt``, for offline use."""
+
+    def fetch(url: str) -> str:
+        path = Path(directory) / f"{url.rsplit('/', 2)[-2]}.txt"
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise ProviderError(f"No local copy at {path}.") from exc
+
+    return fetch
 
 
 def _http_get(url: str) -> str:
@@ -85,11 +102,15 @@ class PublicTextArchiveAdapter(DocumentProvider):
         author = reference.author or header.get("Author", "Unknown")
         if not title:
             raise ProviderError(f"Book {reference.source_id} has no title.")
+        source_url = f"https://www.gutenberg.org/ebooks/{reference.source_id}"
         return Book(
+            # Same book, same id: importing it again replaces it.
+            id=uuid5(NAMESPACE_URL, source_url),
             title=title,
             author=author,
             text=clean_text(raw),
-            source_url=f"https://www.gutenberg.org/ebooks/{reference.source_id}",
+            publication_date=reference.publication_date,
+            source_url=source_url,
             license=GUTENBERG_LICENSE,
             downloadable=True,
             topics=reference.topics,

@@ -26,6 +26,10 @@ class DocumentRepository(ABC):
         """Documents matching every term of ``query``; title matches first."""
 
     @abstractmethod
+    def list_all(self) -> list[Document]:
+        """Every stored document, ordered by title."""
+
+    @abstractmethod
     def save(self, document: Document) -> None:
         """Insert the document, or replace the stored copy with the same id."""
 
@@ -59,6 +63,12 @@ class SQLDocumentRepository(DocumentRepository):
             f"SELECT * FROM documents WHERE {where} "
             f"ORDER BY {in_title} DESC, title COLLATE NOCASE",
             parameters,
+        ).fetchall()
+        return [_to_document(row) for row in rows]
+
+    def list_all(self) -> list[Document]:
+        rows = self._connection.execute(
+            "SELECT * FROM documents ORDER BY title COLLATE NOCASE"
         ).fetchall()
         return [_to_document(row) for row in rows]
 

@@ -6,6 +6,7 @@ from praxis.library import (
     PublicTextArchiveAdapter,
     SourceReference,
     clean_text,
+    directory_fetcher,
 )
 
 RAW_BOOK = "﻿" + "\r\n".join(
@@ -132,3 +133,19 @@ def test_book_without_any_title_is_rejected():
 
     with pytest.raises(ProviderError):
         adapter.fetch(SourceReference("99"))
+
+
+def test_importing_the_same_book_twice_gives_the_same_id():
+    adapter = PublicTextArchiveAdapter(fetcher=FakeFetcher())
+
+    assert adapter.fetch(SourceReference("61")).id == adapter.fetch(SourceReference("61")).id
+    assert adapter.fetch(SourceReference("61")).id != adapter.fetch(SourceReference("62")).id
+
+
+def test_directory_fetcher_reads_local_copies(tmp_path):
+    (tmp_path / "61.txt").write_text(RAW_BOOK, encoding="utf-8")
+    adapter = PublicTextArchiveAdapter(fetcher=directory_fetcher(tmp_path))
+
+    assert adapter.fetch(SourceReference("61")).title == "The Communist Manifesto"
+    with pytest.raises(ProviderError):
+        adapter.fetch(SourceReference("1346"))

@@ -127,3 +127,13 @@ def test_data_persists_across_connections(tmp_path):
     second = Database(path)
     assert SQLDocumentRepository(second).find_by_id(book.id) == book
     second.close()
+
+
+def test_list_all_returns_every_document_by_title(repository):
+    repository.save(imperialism())
+    repository.save(capital())
+
+    assert [d.title for d in repository.list_all()] == [
+        "Capital, Volume I",
+        "Imperialism, the Highest Stage of Capitalism",
+    ]
