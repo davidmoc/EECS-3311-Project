@@ -149,3 +149,24 @@ def test_directory_fetcher_reads_local_copies(tmp_path):
     assert adapter.fetch(SourceReference("61")).title == "The Communist Manifesto"
     with pytest.raises(ProviderError):
         adapter.fetch(SourceReference("1346"))
+
+
+@pytest.mark.parametrize(
+    "credit",
+    [
+        "Produced by Odessa Paige Turner and the\nOnline Distributed Proofreading Team",
+        "E-text prepared by Odessa Paige Turner and the Project Gutenberg Online",
+        "Note: Images of the original pages are available through the Google Books Library Project.",
+    ],
+)
+def test_volunteer_credits_at_the_start_are_dropped(credit):
+    raw = f"*** START OF THE PROJECT GUTENBERG EBOOK X ***\n\n{credit}\n\nThe author's first words."
+
+    assert clean_text(raw) == "The author's first words."
+
+
+def test_credit_wording_later_in_the_book_is_kept():
+    body = "\n\n".join(f"Paragraph {n}." for n in range(1, 7))
+    raw = f"{body}\n\nProduced by the embroidery of lace."
+
+    assert clean_text(raw).endswith("Produced by the embroidery of lace.")

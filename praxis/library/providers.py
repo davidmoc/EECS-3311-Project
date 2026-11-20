@@ -26,6 +26,10 @@ GUTENBERG_LICENSE = "Public domain (Project Gutenberg)"
 _START = re.compile(r"^\*\*\* ?START OF (THE|THIS) PROJECT GUTENBERG[^*]*\*\*\*", re.M)
 _END = re.compile(r"^\*\*\* ?END OF (THE|THIS) PROJECT GUTENBERG[^*]*\*\*\*", re.M)
 _OLD_END = re.compile(r"^End of (the )?Project Gutenberg", re.M | re.I)
+# Volunteer credits and scan notes that open some e-books; not the author's words.
+_CREDIT = re.compile(r"^(Produced by|E-text prepared by|Note: Images of the original pages)\b")
+# Credits only ever sit at the very start, so later paragraphs are not checked.
+_CREDIT_SEARCH_DEPTH = 5
 _HEADER_FIELD = re.compile(r"^(Title|Author):\s*(.+)$", re.M)
 
 
@@ -141,4 +145,9 @@ def clean_text(raw: str) -> str:
     text = _OLD_END.split(text)[0]
     paragraphs = re.split(r"\n\s*\n", text)
     joined = (" ".join(line.strip() for line in p.splitlines()) for p in paragraphs)
-    return "\n\n".join(p for p in (re.sub(r"\s+", " ", j).strip() for j in joined) if p)
+    kept = [p for p in (re.sub(r"\s+", " ", j).strip() for j in joined) if p]
+    kept = [
+        p for index, p in enumerate(kept)
+        if index >= _CREDIT_SEARCH_DEPTH or not _CREDIT.match(p)
+    ]
+    return "\n\n".join(kept)
