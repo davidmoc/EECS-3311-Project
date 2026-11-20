@@ -3,18 +3,55 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import date
 from uuid import UUID
 
-from praxis.documents import Article, Book, Document, NewsArticle
+from praxis.documents import Article, Book, Document, NewsArticle, Passage
 from praxis.persistence.database import Database
 
 _KINDS: dict[str, type[Document]] = {
     cls.kind: cls for cls in (Document, Book, Article, NewsArticle)
 }
 _SEARCHED_COLUMNS = ("title", "author", "topics", "text")
+_METADATA_COLUMNS = (
+    "id, kind, title, author, '' AS text, publication_date, source_url, "
+    "license, downloadable, topics, outlet"
+)
+
+# Paragraphs shorter than this are headings, title pages and credits rather
+# than argument, so they are not offered as evidence.
+MIN_INDEXED_WORDS = 8
+
+# Words that say nothing about what a question is about. Without this, "what
+# did Marx say about the state" would rank passages by "what" and "about".
+_STOPWORDS = frozenset(
+    """a about above after again against all am an and any are as at be
+    because been before being below between both but by can could did do
+    does doing down during each explain few for from further had has have
+    having he her here hers him his how i if in into is it its itself just
+    me more most my no nor not now of off on once only or other our ours
+    out over own same she should so some such tell than that the their
+    them then there these they this those through to too under until up
+    us very was we were what when where which while who whom why will
+    with would you your""".split()
+)
+
+
+@dataclass(frozen=True)
+class PassageMatch:
+    """A passage found by full-text search.
+
+    ``document`` carries the source's metadata for citing it; its ``text``
+    is left empty so a search never loads whole books.
+    """
+
+    passage: Passage
+    document: Document
+    score: float  # higher is more relevant
 
 
 class DocumentRepository(ABC):
@@ -24,6 +61,11 @@ class DocumentRepository(ABC):
     @abstractmethod
     def search(self, query: str) -> list[Document]:
         """Documents matching every term of ``query``; title matches first."""
+
+    @abstractmethod
+    def search_passages(self, query: str, limit: int = 5) -> list[PassageMatch]:
+        """Passages relevant to any significant word of ``query``, most
+        relevant first. Common words like "what" or "the" are ignored."""
 
     @abstractmethod
     def find_ids_by_prefix(self, prefix: str) -> list[UUID]:
@@ -45,6 +87,7 @@ class DocumentRepository(ABC):
 class SQLDocumentRepository(DocumentRepository):
     def __init__(self, database: Database) -> None:
         self._connection = database.connection
+        self._index_unindexed_documents()
 
     def find_by_id(self, document_id: UUID) -> Document | None:
         row = self._connection.execute(
@@ -74,6 +117,33 @@ class SQLDocumentRepository(DocumentRepository):
         ).fetchall()
         return [_to_document(row) for row in rows]
 
+    def search_passages(self, query: str, limit: int = 5) -> list[PassageMatch]:
+        match = _fts_query(query)
+        if match is None or limit < 1:
+            return []
+        # bm25() is lower for better matches, so ascending order is best first.
+        rows = self._connection.execute(
+            "SELECT text, passage_id, document_id, locator, "
+            "bm25(passage_index) AS rank FROM passage_index "
+            "WHERE passage_index MATCH ? ORDER BY rank LIMIT ?",
+            (match, limit),
+        ).fetchall()
+        documents = self._find_metadata({row["document_id"] for row in rows})
+        return [
+            PassageMatch(
+                passage=Passage(
+                    id=UUID(row["passage_id"]),
+                    document_id=UUID(row["document_id"]),
+                    text=row["text"],
+                    locator=row["locator"],
+                ),
+                document=documents[row["document_id"]],
+                score=-row["rank"],
+            )
+            for row in rows
+            if row["document_id"] in documents
+        ]
+
     def find_ids_by_prefix(self, prefix: str) -> list[UUID]:
         rows = self._connection.execute(
             "SELECT id FROM documents WHERE id LIKE ? ESCAPE '\\'",
@@ -91,7 +161,7 @@ class SQLDocumentRepository(DocumentRepository):
         return [_to_document(row) for row in rows]
 
     def save(self, document: Document) -> None:
-        with self._connection:
+        with self._connection:  # document and its index change together
             self._connection.execute(
                 "INSERT OR REPLACE INTO documents VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (
@@ -110,6 +180,58 @@ class SQLDocumentRepository(DocumentRepository):
                     getattr(document, "outlet", ""),
                 ),
             )
+            self._index_passages(document)
+
+    # --- passage index ----------------------------------------------------
+
+    def _index_passages(self, document: Document) -> None:
+        """Replace the document's indexed passages. Caller holds the transaction."""
+        self._connection.execute(
+            "DELETE FROM passage_index WHERE document_id = ?", (str(document.id),)
+        )
+        self._connection.executemany(
+            "INSERT INTO passage_index (text, passage_id, document_id, locator) "
+            "VALUES (?,?,?,?)",
+            [
+                (p.text, str(p.id), str(p.document_id), p.locator)
+                for p in document.passages()
+                if len(p.text.split()) >= MIN_INDEXED_WORDS
+            ],
+        )
+
+    def _index_unindexed_documents(self) -> None:
+        """Index documents stored before the passage index existed."""
+        rows = self._connection.execute(
+            "SELECT * FROM documents WHERE id NOT IN "
+            "(SELECT DISTINCT document_id FROM passage_index)"
+        ).fetchall()
+        if not rows:
+            return
+        with self._connection:
+            for row in rows:
+                self._index_passages(_to_document(row))
+
+    def _find_metadata(self, ids: set[str]) -> dict[str, Document]:
+        if not ids:
+            return {}
+        placeholders = ",".join("?" for _ in ids)
+        rows = self._connection.execute(
+            f"SELECT {_METADATA_COLUMNS} FROM documents WHERE id IN ({placeholders})",
+            list(ids),
+        ).fetchall()
+        return {row["id"]: _to_document(row) for row in rows}
+
+
+def _fts_query(query: str) -> str | None:
+    """Turn free text into an FTS5 query matching any significant word.
+
+    Each word is quoted, so punctuation and FTS operators typed by the user
+    ("AND", "NEAR", quotes) are searched for as plain words, never parsed.
+    """
+    words = [w for w in re.findall(r"\w+", query.lower()) if w not in _STOPWORDS]
+    if not words:
+        return None
+    return " OR ".join(f'"{word}"' for word in dict.fromkeys(words))
 
 
 def _escape_like(term: str) -> str:

@@ -26,6 +26,17 @@ CREATE TABLE IF NOT EXISTS reader_profile (
     data TEXT NOT NULL
 );
 
+-- Full-text index of document passages, so questions can be answered from
+-- the paragraphs that discuss them. Porter stemming lets "classes" match
+-- "class". Rebuilt from documents.text, so it is never the only copy.
+CREATE VIRTUAL TABLE IF NOT EXISTS passage_index USING fts5(
+    text,
+    passage_id  UNINDEXED,
+    document_id UNINDEXED,
+    locator     UNINDEXED,
+    tokenize = 'porter unicode61'
+);
+
 CREATE TABLE IF NOT EXISTS saved_items (
     id        TEXT PRIMARY KEY,
     kind      TEXT NOT NULL,
