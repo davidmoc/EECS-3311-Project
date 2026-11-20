@@ -34,10 +34,10 @@ def test_missing_profile_loads_as_empty(database):
 def test_full_profile_round_trips_through_the_database(database, service):
     book = manifesto()
     service.correct_knowledge_assessment("dialectics", KnowledgeLevel.INTERMEDIATE)
-    service.infer_knowledge("state", KnowledgeLevel.INTRODUCTORY)
+    service.update_profile(lambda p: p.knowledge.update_level("state", KnowledgeLevel.INTRODUCTORY))
     service.add_interest("labour")
     service.remove_interest("religion")
-    service.record_reading(book, 2)
+    service.update_profile(lambda p: p.history.record(book.id, book.title, 2, 3, service.now()))
     service.set_explanation_depth(ExplanationDepth.DETAILED)
     service.set_personalization(False)
     service.set_background("  Engineering student.  ")
@@ -57,22 +57,16 @@ def test_full_profile_round_trips_through_the_database(database, service):
 def test_reader_correction_survives_later_inference(service):
     service.correct_knowledge_assessment("state", KnowledgeLevel.NONE)
 
-    assert not service.infer_knowledge("state", KnowledgeLevel.ADVANCED)
+    service.update_profile(lambda p: p.knowledge.update_level("state", KnowledgeLevel.ADVANCED))
     assert service.get_profile().knowledge.get_level("state") is KnowledgeLevel.NONE
 
 
 def test_remove_reports_whether_anything_was_removed(service):
-    service.infer_knowledge("state", KnowledgeLevel.INTRODUCTORY)
+    service.update_profile(lambda p: p.knowledge.update_level("state", KnowledgeLevel.INTRODUCTORY))
 
     assert service.remove_knowledge_assessment("state") is True
     assert service.remove_knowledge_assessment("state") is False
     assert service.remove_interest("unknown") is False
-
-
-def test_record_reading_uses_document_length(service):
-    record = service.record_reading(manifesto(), 3)
-
-    assert record.total_paragraphs == 3 and record.completed
 
 
 def test_reset_forgets_everything(service):

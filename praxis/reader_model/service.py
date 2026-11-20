@@ -13,14 +13,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 
-from praxis.documents import Document
 from praxis.persistence import ReaderProfileRepository
 from praxis.reader_model.models import (
     AssessmentSource,
     ExplanationDepth,
     KnowledgeLevel,
     ReaderProfile,
-    ReadingRecord,
 )
 
 Clock = Callable[[], datetime]
@@ -78,22 +76,9 @@ class ReaderProfileService:
         self._repository.save(profile)
         return profile
 
-    # --- observations from activity (used by ReaderModelUpdater) ----------
+    # --- for observers that record activity --------------------------------
 
-    def record_reading(self, document: Document, paragraph: int) -> ReadingRecord:
-        total = len(document.passages())
-        records = []
-        self.update_profile(
-            lambda p: records.append(
-                p.history.record(document.id, document.title, paragraph, total, self._clock())
-            )
-        )
-        return records[0]
-
-    def infer_knowledge(self, topic: str, level: KnowledgeLevel) -> bool:
-        changed = []
-        self.update_profile(lambda p: changed.append(p.knowledge.update_level(topic, level)))
-        return changed[0]
-
-    def infer_interest(self, topic: str, weight: float = 1.0) -> None:
-        self.update_profile(lambda p: p.interests.add(topic, weight))
+    def now(self) -> datetime:
+        """The service's clock, so observers timestamp activity consistently
+        (and tests can fix the time)."""
+        return self._clock()

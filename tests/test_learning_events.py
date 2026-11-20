@@ -142,3 +142,47 @@ def test_marking_known_does_not_lower_a_higher_level(setup):
     bus.publish(PrerequisiteMarkedKnown("commodity"))
 
     assert profiles.get_profile().knowledge.get_level("commodity") is KnowledgeLevel.ADVANCED
+
+
+class CountingRepository(SQLReaderProfileRepository):
+    def __init__(self, database):
+        super().__init__(database)
+        self.loads = self.saves = 0
+
+    def load(self):
+        self.loads += 1
+        return super().load()
+
+    def save(self, profile):
+        self.saves += 1
+        super().save(profile)
+
+
+@pytest.mark.parametrize(
+    "activity",
+    [
+        DocumentRead(book(), 4),  # finishing: history, interests and knowledge all change
+        TopicResearched("state"),
+        PrerequisiteMarkedKnown("commodity"),
+    ],
+)
+def test_each_activity_loads_and_saves_the_profile_once(activity):
+    database = Database()
+    repository = CountingRepository(database)
+    bus = LearningEventBus()
+    bus.subscribe(ReaderModelUpdater(ReaderProfileService(repository)))
+
+    bus.publish(activity)
+
+    assert (repository.loads, repository.saves) == (1, 1)
+    database.close()
+
+
+def test_reading_record_uses_document_length(setup):
+    bus, profiles = setup
+    text = book()
+
+    bus.publish(DocumentRead(text, 2))
+
+    record = profiles.get_profile().history.get(text.id)
+    assert (record.furthest_paragraph, record.total_paragraphs) == (2, 4)
