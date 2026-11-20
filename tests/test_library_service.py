@@ -192,3 +192,20 @@ def test_bundled_sample_library_imports_offline(repository):
     manifesto = library.search("Communist Manifesto")[0]
     assert manifesto.publication_date == date(1848, 2, 21)
     assert manifesto.find_passages("hitherto existing societies")
+
+
+class NoBulkLoadRepository(SQLDocumentRepository):
+    def list_all(self):
+        raise AssertionError("loaded every document")
+
+
+def test_prefix_lookup_and_emptiness_check_never_load_every_document():
+    database = Database()
+    repository = NoBulkLoadRepository(database)
+    book = Book(title="Manifesto", author="Marx")
+    repository.save(book)
+    library = LibraryService(repository)
+
+    assert library.get_document(str(book.id)[:8]) == book
+    assert not library.is_empty()
+    database.close()

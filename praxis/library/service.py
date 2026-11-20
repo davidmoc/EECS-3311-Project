@@ -67,12 +67,12 @@ class LibraryService:
         prefix = document_id.strip().lower()
         if not prefix:
             raise LibraryError("A document id is required.")
-        matches = [d for d in self._documents.list_all() if str(d.id).startswith(prefix)]
+        matches = self._documents.find_ids_by_prefix(prefix)
         if not matches:
             raise LibraryError(f"No text with id starting '{prefix}'.")
         if len(matches) > 1:
             raise LibraryError(f"Id '{prefix}' matches {len(matches)} texts; use more characters.")
-        return matches[0]
+        return self.get_document(matches[0])
 
     # --- getting texts out -------------------------------------------------
 
@@ -124,7 +124,7 @@ class LibraryService:
         return ImportReport(tuple(imported), tuple(failures))
 
     def is_empty(self) -> bool:
-        return not self._documents.list_all()
+        return self._documents.count() == 0
 
 
 def read_catalogue(path: Path | str) -> list[SourceReference]:

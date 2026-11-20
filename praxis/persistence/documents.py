@@ -26,6 +26,14 @@ class DocumentRepository(ABC):
         """Documents matching every term of ``query``; title matches first."""
 
     @abstractmethod
+    def find_ids_by_prefix(self, prefix: str) -> list[UUID]:
+        """Ids of documents whose id starts with ``prefix``. Only ids are
+        read, so resolving a short id does not load any document text."""
+
+    @abstractmethod
+    def count(self) -> int: ...
+
+    @abstractmethod
     def list_all(self) -> list[Document]:
         """Every stored document, ordered by title."""
 
@@ -65,6 +73,16 @@ class SQLDocumentRepository(DocumentRepository):
             parameters,
         ).fetchall()
         return [_to_document(row) for row in rows]
+
+    def find_ids_by_prefix(self, prefix: str) -> list[UUID]:
+        rows = self._connection.execute(
+            "SELECT id FROM documents WHERE id LIKE ? ESCAPE '\\'",
+            (f"{_escape_like(prefix.lower())}%",),
+        ).fetchall()
+        return [UUID(row["id"]) for row in rows]
+
+    def count(self) -> int:
+        return self._connection.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
 
     def list_all(self) -> list[Document]:
         rows = self._connection.execute(

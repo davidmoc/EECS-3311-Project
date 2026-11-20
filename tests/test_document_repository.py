@@ -137,3 +137,20 @@ def test_list_all_returns_every_document_by_title(repository):
         "Capital, Volume I",
         "Imperialism, the Highest Stage of Capitalism",
     ]
+
+
+def test_ids_by_prefix_reads_ids_only_and_ignores_case(repository):
+    first, second = capital(), imperialism()
+    repository.save(first)
+    repository.save(second)
+
+    assert repository.find_ids_by_prefix(str(first.id)[:8].upper()) == [first.id]
+    assert set(repository.find_ids_by_prefix("")) == {first.id, second.id}
+    assert repository.find_ids_by_prefix("%") == []
+    assert repository.find_ids_by_prefix("zz") == []
+
+
+def test_count(repository):
+    assert repository.count() == 0
+    repository.save(capital())
+    assert repository.count() == 1
