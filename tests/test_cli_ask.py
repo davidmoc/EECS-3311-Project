@@ -70,3 +70,24 @@ def test_ask_rejects_an_empty_question(run):
 
     assert result.exit_code == 1
     assert "Ask a question first" in result.output
+
+
+def test_ask_save_puts_the_answer_in_the_workspace(seeded, run, monkeypatch, cli_database):
+    use_llm(monkeypatch, cli_database, "bourgeoisie", "The bourgeoisie rules [1].")
+
+    result = run("ask", "Who rules?", "--save", "-t", "state")
+
+    assert result.exit_code == 0, result.output
+    assert "Saved to your workspace" in result.output
+    listing = run("workspace", "list", "--kind", "research").output
+    assert "[research] Q: Who rules?" in listing
+    assert "tags: state" in listing
+
+
+def test_ask_save_with_no_sources_saves_nothing(seeded, run, monkeypatch, cli_database):
+    use_llm(monkeypatch, cli_database, "blockchain")
+
+    result = run("ask", "Is bitcoin a blockchain?", "--save")
+
+    assert "Nothing was saved" in result.output
+    assert "empty" in run("workspace", "list").output

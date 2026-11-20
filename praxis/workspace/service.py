@@ -10,6 +10,7 @@ from collections.abc import Callable
 from datetime import datetime
 from uuid import UUID
 
+from praxis.agent import AgentResponse
 from praxis.documents import Document, Passage
 from praxis.persistence import WorkspaceRepository
 from praxis.workspace.models import SavedItem, SavedItemKind, Workspace
@@ -66,6 +67,24 @@ class WorkspaceService:
             )
         )
 
+    def save_answer(
+        self, response: AgentResponse, note: str = "", tags: tuple[str, ...] = ()
+    ) -> SavedItem:
+        """Save an answer with its passages, so it can be reread without
+        asking again. Saving the same question again replaces the answer."""
+        question = " ".join(response.question.split())
+        return self.save_item(
+            SavedItem(
+                kind=SavedItemKind.RESEARCH,
+                title=f"Q: {question}",
+                reference=f"question:{question.lower()}",
+                content=render_answer(response),
+                note=note,
+                tags=tags,
+                saved_at=self._clock(),
+            )
+        )
+
     def add_note(self, title: str, text: str = "", tags: tuple[str, ...] = ()) -> SavedItem:
         return self.save_item(
             SavedItem(SavedItemKind.NOTE, title, content=text, tags=tags, saved_at=self._clock())
@@ -111,3 +130,21 @@ class WorkspaceService:
             return None
         number = item.reference.rsplit("#¶", 1)[1]
         return int(number) if number.isdigit() else None
+
+
+def render_answer(response: AgentResponse) -> str:
+    """Plain-text snapshot of an answer: explanation (marked as AI), then
+    each source with its citation and the quoted text."""
+    parts = []
+    if response.explanation:
+        parts.append(f"Explanation (AI-generated):\n{response.explanation}")
+    if response.sources:
+        parts.append(
+            "Sources:\n"
+            + "\n\n".join(
+                f"{s.label} {s.citation.format()}\n{s.citation.quoted_text}"
+                for s in response.sources
+            )
+        )
+    parts.extend(f"Note: {warning}" for warning in response.warnings)
+    return "\n\n".join(parts)

@@ -109,3 +109,40 @@ def test_search_finds_saved_items(service):
     service.add_note("Unrelated")
 
     assert [i.kind for i in service.search("class struggle")] == [SavedItemKind.DOCUMENT]
+
+
+# --- saved answers (F04 + F15) ----------------------------------------------
+
+
+def answer(question="Why do wages fall?", explanation="Competition [1]."):
+    from praxis.agent import AgentResponse, ResearchCorpus, ResponseStatus
+
+    document = Book(title="Manifesto", author="Marx", text="Wages fall.", license="Public domain")
+    source = ResearchCorpus().add_passage(document, document.passages()[0])
+    return AgentResponse(
+        question, ResponseStatus.ANSWERED, (source,), explanation, (source,),
+        warnings=("A warning.",),
+    )
+
+
+def test_answer_is_saved_with_its_sources(service):
+    item = service.save_answer(answer(), tags=("wages",))
+
+    assert item.kind is SavedItemKind.RESEARCH
+    assert item.title == "Q: Why do wages fall?"
+    assert item.tags == ("wages",)
+    assert item.content == (
+        "Explanation (AI-generated):\nCompetition [1].\n\n"
+        "Sources:\n[1] Marx, “Manifesto”, ¶1\nWages fall.\n\n"
+        "Note: A warning."
+    )
+    assert service.search("competition") == [item]
+
+
+def test_saving_the_same_question_again_replaces_the_answer(service):
+    first = service.save_answer(answer())
+    second = service.save_answer(answer("why  do WAGES fall?", "Supply [1]."))
+
+    assert second.id == first.id
+    assert len(service.get_workspace().items) == 1
+    assert "Supply [1]." in second.content

@@ -82,11 +82,20 @@ def _print_documents(documents: list[Document], empty_message: str) -> None:
 @app.command("ask")
 def ask(
     question: Annotated[str, typer.Argument(help="Your question, in quotes.")],
+    save: Annotated[bool, typer.Option("--save", help="Save the answer to your workspace.")] = False,
+    tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t", help="Tag for the saved answer; repeatable.")] = None,
 ) -> None:
     """Ask a question; get the library passages that address it, then an explanation."""
     with session() as application:
         response = application.agent.answer_question(question)
+        saved = None
+        if save and response.sources:
+            saved = application.workspace.save_answer(response, tags=tuple(tag or ()))
     _print_response(response)
+    if saved:
+        typer.echo(f"Saved to your workspace [{str(saved.id)[:8]}]")
+    elif save:
+        typer.echo("Nothing was saved: there were no sources to keep.")
 
 
 def _print_response(response: AgentResponse) -> None:
