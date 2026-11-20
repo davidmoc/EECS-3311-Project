@@ -72,3 +72,14 @@ platform.openai.com.
   - `Application` (`praxis/app.py`) added as a composition root shared by the CLI and the future GUI.
 - **Human contribution:** _Code review pending._
 - **Outcome:** Ten commits pushed to `main`.
+
+### 2026-11-19 — Defects found from call traces
+
+- **Task:** Check the implemented features against the design by tracing real executions.
+- **Input/Instruction:** "show me traces of the features you implemented", then "i noticed those things, fix them".
+- **AI contribution:** Ran each CLI feature under a profiler and printed the `praxis` call tree. The traces exposed three defects, which were then fixed, each with a regression test:
+  1. `ReaderModelUpdater` loaded and saved the whole profile once per topic (10 loads, 9 saves to finish one text). Now one load and one save per event.
+  2. Looking a text up by short id loaded every document's full text (about 1.3 MB); so did the "is the library empty" check. Now an id-only SQL query and `COUNT(*)`.
+  3. Gutenberg volunteer credits ("Produced by …") and scan notes became paragraph 1 of two texts, so they could be cited as the author's words. Now stripped from the opening paragraphs.
+- **Human contribution:** Reviewed the traces and asked for the three defects to be fixed.
+- **Outcome:** Three fix commits (`458c10a`, `903b0bb`, `a99da9f`); 184 tests pass.
