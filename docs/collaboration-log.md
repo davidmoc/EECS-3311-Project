@@ -8,7 +8,7 @@ reviewed; where review has not happened yet, it says so.
 
 | Tool | LLM model | Purpose | Token / money cost |
 |---|---|---|---|
-| Claude Code (CLI) | Claude Fable 5.2 (`claude-fable-5-2`) on 2026-11-16; Claude Opus 5.5 (`claude-opus-5-5`) on 2026-11-18 | Design review, code generation, tests | _to be filled from `/cost` at the end of each session_ |
+| Claude Code (CLI) | Claude Fable 5.2 (`claude-fable-5-2`) on 2026-11-16; Claude Opus 5.5 (`claude-opus-5-5`) on 2026-11-18 and 2026-11-19 | Design review, code generation, tests | _to be filled from `/cost` at the end of each session_ |
 
 ### Cost per session
 
@@ -20,6 +20,7 @@ platform.openai.com.
 |---|---|---|---|---|
 | 2026-11-16 | 5.7m | $5.90 | $0 | Design review, stack and scope decisions, foundation layers |
 | 2026-11-18 | _from `/cost`_ | _from `/cost`_ | $0 | Library, reader model, workspace, CLI |
+| 2026-11-19 | _from `/cost`_ | _from `/cost`_ | _from OpenAI usage page_ | Source-first question answering (F04) |
 
 ## Interactions
 
@@ -83,3 +84,19 @@ platform.openai.com.
   3. Gutenberg volunteer credits ("Produced by …") and scan notes became paragraph 1 of two texts, so they could be cited as the author's words. Now stripped from the opening paragraphs.
 - **Human contribution:** Reviewed the traces and asked for the three defects to be fixed.
 - **Outcome:** Three fix commits (`458c10a`, `903b0bb`, `a99da9f`); 184 tests pass.
+
+### 2026-11-19 — Source-first question answering (F04)
+
+- **Task:** Implement F04 (UC04, SD02) end to end.
+- **Input/Instruction:** "lets do the next part of praxis".
+- **AI contribution:** Chose F04 as the next slice because it introduces the agent facade that F03 builds on. Added a full-text passage index (SQLite FTS5) to `SQLDocumentRepository`, the `passage_search` tool, `ResearchCorpus`, `AgentResponse`, `PromptBuilder`, `PoliticalResearchAgent.answer_question()`, the `praxis ask` command and `ask --save`. 243 automated tests. One live run against `gpt-5-mini` ("What did Marx say about the state?") returned six passages, all cited; a quotation falling outside the displayed excerpt was checked against ¶23 of the Manifesto and is genuine.
+- **Problems met:** Searching the raw question ranked prefaces that mention Marx above passages about the state, because "Marx" is a rare word in the index. Fixed by asking the model for search keywords first and searching the raw question only to top up. One AI-written CLI test assumed "money" appears nowhere in the library; it appears in several texts, so the test question was changed.
+- **Design changes from Stage 1 introduced here:**
+  - Retrieval is by passage, through a new `passage_search` tool and `DocumentRepository.search_passages()`; SD02 shows `LibrarySearch` returning documents. Paragraphs under eight words (headings, credits) are not indexed, so they cannot be cited.
+  - `answer_question()` makes two model calls: one to choose search keywords (falls back to the question if it fails) and one to explain. SD02 shows one.
+  - If the model fails after passages were found, the passages are still returned with a warning; SD02 shows only `displayError()`. The same applies when no API key is configured.
+  - Every `[n]` in the explanation is checked against the retrieved sources. References to sources that were not retrieved, and explanations that cite nothing, produce warnings.
+  - `AgentResponse` (used but undefined in Stage 1) has a status (`ANSWERED`, `NO_SOURCES`, `EXPLANATION_FAILED`), keeps passages and explanation separate, and records whether reader context was used.
+  - `ResearchController` is not a separate class yet; the `ask` CLI command plays that role.
+- **Human contribution:** _Code review pending._
+- **Outcome:** Seven code commits and this documentation commit, pushed to `main`.

@@ -5,8 +5,9 @@ theory through a Marxist analytical framework. The Stage 1 design is in
 [`Stage 1 - Proposal/`](Stage%201%20-%20Proposal/).
 
 > **Status:** Stage 2 implementation in progress. Working now through the
-> CLI: the reading library (F05), the reader model (F13) and the workspace
-> (F15). The research agent, news dashboard and GUI are not built yet.
+> CLI: source-first question answering (F04), the reading library (F05),
+> the reader model (F13) and the workspace (F15). The multi-step research
+> agent, news dashboard and GUI are not built yet.
 
 ## Prerequisites
 
@@ -45,6 +46,10 @@ Run `python -m praxis --help` (or `praxis --help` after `pip install -e .`).
 Every command has `--help`.
 
 ```bash
+# Source-first questions (F04): passages first, then an AI explanation
+python -m praxis ask "What did Marx say about the state?"
+python -m praxis ask "Why are wages low?" --save -t wages   # keep it in the workspace
+
 # Reading library (F05): five public-domain texts ship in data/library
 python -m praxis library seed                # load them (no network needed)
 python -m praxis library search "class struggle"
@@ -66,6 +71,11 @@ python -m praxis workspace list
 python -m praxis workspace open <item-id>
 ```
 
+`ask` searches the library's paragraphs, shows the ones that address the
+question, and only then asks the model to explain them, citing `[n]`. If
+no passage fits, it says so instead of answering from the model's memory.
+Without an API key it still shows the passages.
+
 Reading with `library read` updates your reading progress, interests and
 inferred knowledge automatically; `profile know` always overrides inference.
 
@@ -82,6 +92,7 @@ API key and no network access.
 
 | Path | Contents |
 |---|---|
+| `praxis/agent/` | `PoliticalResearchAgent` facade, `ResearchCorpus`, `PromptBuilder` |
 | `praxis/app.py` | Composition root shared by CLI and GUI |
 | `praxis/cli/` | Typer command-line interface |
 | `praxis/config.py` | Local settings and API-key handling |
