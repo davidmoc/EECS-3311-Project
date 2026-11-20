@@ -19,6 +19,7 @@ from typing import Annotated, NoReturn, Optional
 
 import typer
 
+from praxis.agent import AgentError, AgentResponse, ResponseStatus
 from praxis.app import Application, build_application, bundled_library_service
 from praxis.documents import Document
 from praxis.library import LibraryError, SourceReference
@@ -38,7 +39,10 @@ app.add_typer(workspace_app, name="workspace")
 application_factory = build_application
 
 # Errors whose message is meant for the user, not a stack trace.
-USER_ERRORS = (LibraryError, ValueError)
+USER_ERRORS = (AgentError, LibraryError, ValueError)
+
+# Longest stretch of a passage printed by `ask`; the rest is one command away.
+SHOWN_PASSAGE_CHARS = 600
 
 
 def _fail(message: str) -> NoReturn:
@@ -70,6 +74,49 @@ def _print_documents(documents: list[Document], empty_message: str) -> None:
         typer.echo(f"{_short_id(document)}  {document.title}{year} — {document.author}")
         if document.topics:
             typer.echo(f"          topics: {', '.join(document.topics)}")
+
+
+# --- questions (F04) ---------------------------------------------------------
+
+
+@app.command("ask")
+def ask(
+    question: Annotated[str, typer.Argument(help="Your question, in quotes.")],
+) -> None:
+    """Ask a question; get the library passages that address it, then an explanation."""
+    with session() as application:
+        response = application.agent.answer_question(question)
+    _print_response(response)
+
+
+def _print_response(response: AgentResponse) -> None:
+    cited = {source.number for source in response.cited}
+    if response.sources:
+        typer.secho("Sources", bold=True)
+    for source in response.sources:
+        marker = "  (cited)" if source.number in cited else ""
+        typer.secho(f"\n{source.label} {source.citation.format()}{marker}", fg=typer.colors.CYAN)
+        text = source.citation.quoted_text
+        if len(text) > SHOWN_PASSAGE_CHARS:
+            text = text[:SHOWN_PASSAGE_CHARS].rstrip() + " […]"
+        typer.echo(textwrap.indent(textwrap.fill(text, width=84), "    "))
+        paragraph = source.citation.locator.lstrip("¶")
+        typer.echo(
+            f"    → praxis library read {str(source.citation.document_id)[:8]} --start {paragraph}"
+        )
+
+    if response.status is ResponseStatus.ANSWERED and response.explanation:
+        label = "Explanation (AI-generated"
+        label += ", adapted to your reader profile)" if response.personalized else ")"
+        typer.secho(f"\n{label}", bold=True)
+        for paragraph in response.explanation.split("\n\n"):
+            typer.echo(textwrap.fill(paragraph, width=88))
+            typer.echo()
+
+    for warning in response.warnings:
+        typer.secho(f"Note: {warning}", fg=typer.colors.YELLOW)
+    if response.tokens_used:
+        typer.echo(f"({response.tokens_used} model tokens)")
 
 
 # --- library (F05) -----------------------------------------------------------
