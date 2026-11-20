@@ -4,6 +4,7 @@ from praxis.documents import Book
 from praxis.persistence import Database, SQLDocumentRepository
 from praxis.tools import (
     LibrarySearchTool,
+    PassageSearchTool,
     Tool,
     ToolFactory,
     ToolManager,
@@ -148,8 +149,9 @@ def test_factory_creates_tools_that_work_through_the_manager(repository):
     for tool in factory.create_all():
         manager.register_tool(tool)
 
-    assert manager.tool_names() == ["library_search"]
+    assert manager.tool_names() == ["library_search", "passage_search"]
     assert isinstance(factory.create_tool(ToolType.LIBRARY_SEARCH), LibrarySearchTool)
+    assert isinstance(factory.create_tool(ToolType.PASSAGE_SEARCH), PassageSearchTool)
 
     result = manager.execute_tool("library_search", {"query": "lenin"})
     assert [d.title for d in result.items] == ["State and Revolution"]
@@ -161,3 +163,37 @@ def test_factory_creates_tools_that_work_through_the_manager(repository):
 def test_factory_rejects_unknown_tool_types(repository):
     with pytest.raises(ValueError):
         ToolFactory(repository).create_tool("web_search")
+
+
+# --- PassageSearchTool -----------------------------------------------------
+
+
+def test_passage_search_returns_cited_passages_through_the_manager():
+    database = Database()
+    repository = SQLDocumentRepository(database)
+    repository.save(
+        Book(
+            title="Wage Labour and Capital",
+            author="Karl Marx",
+            text="Wages are not the worker's share in the commodities he produces.",
+        )
+    )
+    manager = ToolManager()
+    manager.register_tool(PassageSearchTool(repository))
+
+    result = manager.execute_tool("passage_search", {"query": "what are wages?"})
+    database.close()
+
+    assert result.success
+    [match] = result.items
+    assert match.document.title == "Wage Labour and Capital"
+    assert match.passage.locator == "¶1"
+
+
+@pytest.mark.parametrize(
+    "tool_input",
+    [{}, {"query": "  "}, {"query": 3}, {"query": "x", "limit": 0},
+     {"query": "x", "limit": 21}, {"query": "x", "limit": True}],
+)
+def test_passage_search_rejects_bad_input(repository, tool_input):
+    assert PassageSearchTool(repository).validate(tool_input) is False

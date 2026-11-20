@@ -12,16 +12,19 @@ from enum import Enum
 from praxis.persistence import DocumentRepository
 from praxis.tools.base import Tool
 from praxis.tools.library_search import LibrarySearchTool
+from praxis.tools.passage_search import PassageSearchTool
 
 
 class ToolType(Enum):
     LIBRARY_SEARCH = "library_search"
+    PASSAGE_SEARCH = "passage_search"
 
 
 class ToolFactory:
     def __init__(self, documents: DocumentRepository) -> None:
         self._creators: dict[ToolType, Callable[[], Tool]] = {
             ToolType.LIBRARY_SEARCH: lambda: LibrarySearchTool(documents),
+            ToolType.PASSAGE_SEARCH: lambda: PassageSearchTool(documents),
         }
 
     def create_tool(self, tool_type: ToolType) -> Tool:
