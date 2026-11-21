@@ -37,6 +37,13 @@ CREATE VIRTUAL TABLE IF NOT EXISTS passage_index USING fts5(
     tokenize = 'porter unicode61'
 );
 
+-- Which documents passage_index covers. FTS5 columns cannot be indexed, so
+-- asking passage_index this would read every row; this table answers it by
+-- primary key. Written in the same transaction as the passages.
+CREATE TABLE IF NOT EXISTS indexed_documents (
+    document_id TEXT PRIMARY KEY
+);
+
 CREATE TABLE IF NOT EXISTS saved_items (
     id        TEXT PRIMARY KEY,
     kind      TEXT NOT NULL,

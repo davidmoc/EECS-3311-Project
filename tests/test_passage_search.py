@@ -120,6 +120,7 @@ def test_documents_stored_before_the_index_existed_are_indexed(tmp_path):
     database = Database(path)
     SQLDocumentRepository(database).save(manifesto())
     database.connection.execute("DELETE FROM passage_index")
+    database.connection.execute("DELETE FROM indexed_documents")
     database.connection.commit()
     database.close()
 
@@ -141,3 +142,31 @@ def test_index_and_document_are_saved_together(repository, monkeypatch):
         repository.save(document)
 
     assert repository.find_by_id(document.id) is None
+
+
+def test_opening_an_indexed_database_does_not_read_the_passage_index(tmp_path):
+    path = tmp_path / "praxis.db"
+    database = Database(path)
+    SQLDocumentRepository(database).save(manifesto())
+    database.close()
+
+    database = Database(path)
+    statements = []
+    database.connection.set_trace_callback(statements.append)
+    SQLDocumentRepository(database)
+    database.close()
+
+    assert statements, "the check should still run"
+    assert not [s for s in statements if "passage_index" in s]
+
+
+def test_document_with_no_indexable_passages_is_not_reindexed_on_open(tmp_path):
+    path = tmp_path / "praxis.db"
+    database = Database(path)
+    SQLDocumentRepository(database).save(Book(title="Title page only", author="A", text="CHAPTER I"))
+    statements = []
+    database.connection.set_trace_callback(statements.append)
+    SQLDocumentRepository(database)
+    database.close()
+
+    assert not [s for s in statements if "INSERT" in s or "DELETE" in s]

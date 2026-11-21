@@ -198,12 +198,20 @@ class SQLDocumentRepository(DocumentRepository):
                 if len(p.text.split()) >= MIN_INDEXED_WORDS
             ],
         )
+        self._connection.execute(
+            "INSERT OR IGNORE INTO indexed_documents VALUES (?)", (str(document.id),)
+        )
 
     def _index_unindexed_documents(self) -> None:
-        """Index documents stored before the passage index existed."""
+        """Index documents stored before the passage index existed.
+
+        Runs whenever a repository is created, so it must stay cheap: the
+        anti-join uses indexed_documents' primary key, never passage_index.
+        """
         rows = self._connection.execute(
-            "SELECT * FROM documents WHERE id NOT IN "
-            "(SELECT DISTINCT document_id FROM passage_index)"
+            "SELECT documents.* FROM documents LEFT JOIN indexed_documents "
+            "ON indexed_documents.document_id = documents.id "
+            "WHERE indexed_documents.document_id IS NULL"
         ).fetchall()
         if not rows:
             return
