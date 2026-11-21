@@ -5,9 +5,11 @@ theory through a Marxist analytical framework. The Stage 1 design is in
 [`Stage 1 - Proposal/`](Stage%201%20-%20Proposal/).
 
 > **Status:** Stage 2 implementation in progress. Working now through the
-> CLI: source-first question answering (F04), the reading library (F05),
-> the reader model (F13) and the workspace (F15). The multi-step research
-> agent, news dashboard and GUI are not built yet.
+> CLI: a first version of the multi-step research agent (F03),
+> source-first question answering (F04), the reading library (F05), the
+> reader model (F13) and the workspace (F15). The research agent does not
+> yet revise its plan from an assessment of what it found, or save
+> sessions. The news dashboard and GUI are not built yet.
 
 ## Prerequisites
 
@@ -46,6 +48,10 @@ Run `python -m praxis --help` (or `praxis --help` after `pip install -e .`).
 Every command has `--help`.
 
 ```bash
+# Multi-step research (F03): plan, gather sources step by step, then analyse
+python -m praxis research "Why did the 1848 revolution in Germany fail?"
+python -m praxis research "What is imperialism?" --max-steps 3 --max-tool-calls 4
+
 # Source-first questions (F04): passages first, then an AI explanation
 python -m praxis ask "What did Marx say about the state?"
 python -m praxis ask "Why are wages low?" --save -t wages   # keep it in the workspace
@@ -70,6 +76,12 @@ python -m praxis workspace save-passage 59983f05 14 --note "key thesis"
 python -m praxis workspace list
 python -m praxis workspace open <item-id>
 ```
+
+`research` asks the model for a short plan of typed steps (evidence,
+theory, history), runs them as library searches within a budget, retries
+a failed step once, and then has the model write findings, historical
+context, theoretical connections and open questions, citing `[n]`. It
+prints every step it took and anything it could not do.
 
 `ask` searches the library's paragraphs, shows the ones that address the
 question, and only then asks the model to explain them, citing `[n]`. If
