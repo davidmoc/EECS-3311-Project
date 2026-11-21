@@ -46,6 +46,26 @@ class ResearchPlanner:
         commands.append(RetrieveEvidenceCommand(objective))
         return ResearchPlan(objective, commands)
 
+    def revise_after_failure(
+        self,
+        plan: ResearchPlan,
+        command: ResearchCommand,
+        error: str | None,
+        session: ResearchSession,
+    ) -> ResearchCommand | None:
+        """Schedule a retry of a failed command to run next, and return it;
+        or, when it has no attempts left, record what could not be obtained
+        and return None."""
+        if command.can_retry:
+            retry = command.retry()
+            plan.add_first(retry)
+            return retry
+        session.add_warning(
+            f"'{command.describe()}' failed ({error or 'unknown error'}); "
+            "the material it was meant to find is missing from these results."
+        )
+        return None
+
     def _planned_commands(
         self, session: ResearchSession, profile: ReaderProfile | None
     ) -> list[ResearchCommand]:
