@@ -44,6 +44,27 @@ Use keywords and short phrases in the vocabulary those texts would use, not \
 full sentences. Leave out author names. Include at least one evidence step. \
 No other text."""
 
+OPEN_QUESTIONS_HEADING = "## Open questions"
+
+RESEARCH_SYNTHESIS_FORMAT = f"""\
+Organise the findings under these headings, in this order:
+## Findings
+## Historical context
+## Theoretical connections
+{OPEN_QUESTIONS_HEADING}
+
+Under the first three headings, write prose that cites passages as [1], \
+[2]. If the passages say nothing relevant for a heading, write one sentence \
+saying so. Under "{OPEN_QUESTIONS_HEADING}", list as "- " bullets two to \
+four questions the passages leave unanswered and that further research \
+should pursue."""
+
+_PURPOSE_HEADINGS = {
+    "evidence": "Retrieved as evidence on the question",
+    "theory": "Retrieved for theoretical background",
+    "history": "Retrieved for historical development",
+}
+
 SOURCE_FIRST_RULES = """\
 You are the research assistant of Praxis, a platform for studying politics, \
 history and Marxist theory from primary sources. The reader should engage \
@@ -117,6 +138,78 @@ class PromptBuilder:
                 if keywords:
                     steps.setdefault((match.group(1).lower(), keywords), None)
         return list(steps)[:MAX_PLAN_STEPS]
+
+    def build_research_prompt(
+        self,
+        objective: str,
+        corpus: ResearchCorpus,
+        purposes: dict[int, str],
+        profile: ReaderProfile | None = None,
+        unfinished: str | None = None,
+    ) -> Prompt:
+        """A prompt asking the model to synthesise research findings.
+
+        Sources are grouped by why they were retrieved. ``unfinished``
+        explains why research stopped early, so the model says which parts
+        are not covered instead of filling them from memory.
+        """
+        if corpus.is_empty:
+            raise ValueError("A research prompt needs at least one source.")
+
+        groups: dict[str, list[str]] = {}
+        for source in corpus.sources:
+            purpose = purposes.get(source.number, "evidence")
+            groups.setdefault(purpose, []).append(
+                f"{source.label} {source.citation.format()}\n{source.citation.quoted_text}"
+            )
+        sections = [
+            f"### {_PURPOSE_HEADINGS.get(purpose, purpose)}\n\n" + "\n\n".join(passages)
+            for purpose, passages in groups.items()
+        ]
+
+        depth = profile.explanation_depth if profile else ExplanationDepth.STANDARD
+        system = (
+            f"{SOURCE_FIRST_RULES}\n\n{RESEARCH_SYNTHESIS_FORMAT}\n\n"
+            f"{_DEPTH_GUIDANCE[depth]}"
+        )
+        context = reader_context(profile)
+        if context:
+            system += f"\n\nAbout the reader:\n{context}"
+
+        user = f"Research question: {objective}\n\n"
+        if unfinished:
+            user += (
+                f"Research stopped before every planned step ran: {unfinished}. "
+                "Say which parts of the question the passages do not cover.\n\n"
+            )
+        user += "Passages:\n\n" + "\n\n".join(sections)
+        return Prompt(system=system, user=user)
+
+    @staticmethod
+    def split_open_questions(text: str) -> tuple[str, list[str]]:
+        """The synthesis without its open-questions section, and the
+        questions listed there."""
+        before, heading, after = text.partition(OPEN_QUESTIONS_HEADING)
+        if not heading:
+            return text.strip(), []
+        questions: list[str] = []
+        rest: list[str] = []
+        in_list = True
+        for line in after.splitlines():
+            stripped = line.strip()
+            if in_list and stripped.startswith("#"):
+                in_list = False  # a later section: keep it in the body
+            if in_list:
+                if stripped[:1] in {"-", "*", "•"}:
+                    question = stripped.lstrip("-*• ").strip()
+                    if question:
+                        questions.append(question)
+            else:
+                rest.append(line)
+        body = before.rstrip()
+        if rest:
+            body += "\n\n" + "\n".join(rest).strip()
+        return body.strip(), questions
 
     def build_question_prompt(
         self,
