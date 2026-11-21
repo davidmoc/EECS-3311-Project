@@ -10,16 +10,11 @@ from praxis.research.commands import ResearchContext
 from praxis.research.plan import ResearchPlan
 from praxis.research.session import ResearchBudget, ResearchSession, utc_now
 
-# Model calls kept back from the loop so the findings can still be written up.
-SYNTHESIS_RESERVE = 1
-
-
 class StopReason(Enum):
     PLAN_COMPLETE = "every planned step has run"
     SOURCES_FULL = "enough sources were gathered"
     ITERATIONS = "the step limit was reached"
     TOOL_CALLS = "the tool-call limit was reached"
-    LLM_CALLS = "the model-call limit was reached"
     DURATION = "the time limit was reached"
 
     @property
@@ -30,7 +25,6 @@ class StopReason(Enum):
 _BUDGET_REASONS = {
     StopReason.ITERATIONS,
     StopReason.TOOL_CALLS,
-    StopReason.LLM_CALLS,
     StopReason.DURATION,
 }
 
@@ -72,12 +66,16 @@ class ResearchStoppingPolicy:
     def budget_exceeded(
         self, session: ResearchSession, budget: ResearchBudget
     ) -> StopReason | None:
+        """The limit that stops further retrieval steps, if any.
+
+        Model calls are not checked here: retrieval steps do not use the
+        model, so a spent model budget limits only the model's own work
+        (the synthesis), never the gathering of sources.
+        """
         if session.iteration_count >= budget.max_iterations:
             return StopReason.ITERATIONS
         if session.tool_call_count >= budget.max_tool_calls:
             return StopReason.TOOL_CALLS
-        if session.llm_call_count >= budget.max_llm_calls - SYNTHESIS_RESERVE:
-            return StopReason.LLM_CALLS
         if session.elapsed_seconds(self._clock()) >= budget.max_duration_seconds:
             return StopReason.DURATION
         return None

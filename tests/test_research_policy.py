@@ -53,8 +53,6 @@ def test_stops_when_the_corpus_is_full(setup):
     [
         (lambda s: [s.increment_iteration() for _ in range(3)], StopReason.ITERATIONS),
         (lambda s: [s.increment_tool_calls() for _ in range(4)], StopReason.TOOL_CALLS),
-        # one call of the three is kept back for the synthesis
-        (lambda s: [s.increment_llm_calls() for _ in range(2)], StopReason.LLM_CALLS),
     ],
 )
 def test_stops_when_a_limit_is_reached(setup, spend, expected):
@@ -64,6 +62,14 @@ def test_stops_when_a_limit_is_reached(setup, spend, expected):
     reason = policy().stop_reason(session, BUDGET, plan, context)
 
     assert reason is expected and reason.is_budget
+
+
+def test_a_spent_model_budget_does_not_stop_retrieval(setup):
+    session, context, plan = setup
+    for _ in range(3):
+        session.increment_llm_calls()
+
+    assert policy().stop_reason(session, BUDGET, plan, context) is None
 
 
 def test_stops_when_time_runs_out(setup):
