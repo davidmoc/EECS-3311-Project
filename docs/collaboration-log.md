@@ -100,3 +100,13 @@ platform.openai.com.
   - `ResearchController` is not a separate class yet; the `ask` CLI command plays that role.
 - **Human contribution:** _Code review pending._
 - **Outcome:** Seven code commits and this documentation commit, pushed to `main`.
+
+### 2026-11-21 — Defects found from F04 call traces
+
+- **Task:** Check the F04 implementation by tracing real executions.
+- **Input/Instruction:** "show me the traces of what's just been built", then the two fixes to apply: "check the limit before each search, not only after adding a passage" and "add a small indexed_documents table with a primary key, so the check becomes cheap".
+- **AI contribution:** Traced `ask` (answered, no sources, model failure, no API key, `--save`) and the passage-index backfill through the CLI, printing the `praxis` call tree and every SQL statement; the model was scripted so the traces cost nothing. Two defects found and fixed, each with a regression test confirmed to fail before the fix:
+  1. `_retrieve` ran the second passage search even when the keyword search had already filled the corpus, then discarded the results. The limit is now checked before each search.
+  2. The startup check for unindexed documents read the whole FTS index (1,240 rows) on every application start. A keyed `indexed_documents` table now answers it. This also stopped documents with no indexable passages from being re-indexed on every open.
+- **Human contribution:** Reviewed the traces and chose both fixes.
+- **Outcome:** Two fix commits; 247 tests pass. Existing databases re-index once on first open, because `indexed_documents` starts empty.
