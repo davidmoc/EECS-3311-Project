@@ -207,3 +207,36 @@ def test_check_citations_handles_grouped_and_repeated_marks():
 
     assert [s.number for s in cited] == [3, 1]
     assert unknown == [9]
+
+
+def test_question_is_not_searched_when_keywords_fill_the_corpus(database, profiles):
+    repository = SQLDocumentRepository(database)
+    repository.save(
+        Book(
+            title="Wage Studies",
+            author="Anon",
+            text="\n\n".join(
+                f"Study {n}: the wage of labour is set by the cost of subsistence here."
+                for n in range(10)
+            ),
+        )
+    )
+    tools = ToolManager()
+    tools.register_tool(PassageSearchTool(repository))
+    agent = PoliticalResearchAgent(tools, profiles, FakeLLM("wage", "Explained [1]."))
+
+    response = agent.answer_question("Why are wages low?")
+
+    assert len(response.sources) == 6
+    assert tools.call_count == 1  # the keyword search alone filled it
+
+
+def test_question_tops_up_when_keywords_find_too_little(database, profiles):
+    tools = ToolManager()
+    tools.register_tool(PassageSearchTool(SQLDocumentRepository(database)))
+    agent = PoliticalResearchAgent(tools, profiles, FakeLLM("wage", "Explained [1]."))
+
+    response = agent.answer_question("the state")
+
+    assert tools.call_count == 2
+    assert {s.citation.locator for s in response.sources} == {"¶1", "¶2"}

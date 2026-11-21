@@ -149,6 +149,8 @@ class PoliticalResearchAgent:
         queries = ([" ".join(terms)] if terms else []) + [question]
         corpus = ResearchCorpus()
         for query in queries:
+            if len(corpus) >= PASSAGES_PER_QUESTION:
+                break  # already full: another search would be thrown away
             result = self._tools.execute_tool(
                 PASSAGE_SEARCH, {"query": query, "limit": PASSAGES_PER_QUESTION}
             )
