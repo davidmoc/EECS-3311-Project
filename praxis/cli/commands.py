@@ -19,12 +19,14 @@ from typing import Annotated, NoReturn, Optional
 
 import typer
 
-from praxis.agent import AgentError, AgentResponse, ResponseStatus
+from praxis.agent import AgentError, AgentResponse, ResponseStatus, Source
 from praxis.app import Application, build_application, bundled_library_service
 from praxis.documents import Document
 from praxis.library import LibraryError, SourceReference
 from praxis.reader_model import ExplanationDepth, KnowledgeLevel, ReaderProfile
 from praxis.reader_model.events import DocumentRead
+from praxis.research import ResearchBudget, ResearchError
+from praxis.research.result import ResearchResult
 from praxis.workspace import SavedItem, SavedItemKind
 
 app = typer.Typer(help="Praxis: Marxist political research and learning.", no_args_is_help=True)
@@ -39,7 +41,7 @@ app.add_typer(workspace_app, name="workspace")
 application_factory = build_application
 
 # Errors whose message is meant for the user, not a stack trace.
-USER_ERRORS = (AgentError, LibraryError, ValueError)
+USER_ERRORS = (AgentError, LibraryError, ResearchError, ValueError)
 
 # Longest stretch of a passage printed by `ask`; the rest is one command away.
 SHOWN_PASSAGE_CHARS = 600
@@ -99,11 +101,23 @@ def ask(
 
 
 def _print_response(response: AgentResponse) -> None:
-    cited = {source.number for source in response.cited}
-    if response.sources:
+    _print_sources(response.sources, response.cited)
+    if response.status is ResponseStatus.ANSWERED and response.explanation:
+        _print_ai_text("Explanation", response.explanation, response.personalized)
+    _print_warnings(response.warnings, response.tokens_used)
+
+
+def _print_sources(
+    sources: tuple[Source, ...],
+    cited: tuple[Source, ...],
+    purposes: dict[int, str] | None = None,
+) -> None:
+    cited_numbers = {source.number for source in cited}
+    if sources:
         typer.secho("Sources", bold=True)
-    for source in response.sources:
-        marker = "  (cited)" if source.number in cited else ""
+    for source in sources:
+        marker = f"  ({purposes[source.number]})" if purposes and source.number in purposes else ""
+        marker += "  (cited)" if source.number in cited_numbers else ""
         typer.secho(f"\n{source.label} {source.citation.format()}{marker}", fg=typer.colors.CYAN)
         text = source.citation.quoted_text
         if len(text) > SHOWN_PASSAGE_CHARS:
@@ -114,18 +128,74 @@ def _print_response(response: AgentResponse) -> None:
             f"    → praxis library read {str(source.citation.document_id)[:8]} --start {paragraph}"
         )
 
-    if response.status is ResponseStatus.ANSWERED and response.explanation:
-        label = "Explanation (AI-generated"
-        label += ", adapted to your reader profile)" if response.personalized else ")"
-        typer.secho(f"\n{label}", bold=True)
-        for paragraph in response.explanation.split("\n\n"):
-            typer.echo(textwrap.fill(paragraph, width=88))
-            typer.echo()
 
-    for warning in response.warnings:
+def _print_ai_text(title: str, text: str, personalized: bool) -> None:
+    label = f"{title} (AI-generated"
+    label += ", adapted to your reader profile)" if personalized else ")"
+    typer.secho(f"\n{label}", bold=True)
+    for paragraph in text.split("\n\n"):
+        if paragraph.lstrip().startswith("#"):
+            # A markdown heading line, then the paragraph under it.
+            heading, _, rest = paragraph.partition("\n")
+            typer.secho(heading.lstrip("# ").strip(), underline=True)
+            paragraph = rest
+        if paragraph.strip():
+            typer.echo(textwrap.fill(paragraph, width=88))
+        typer.echo()
+
+
+def _print_warnings(warnings: tuple[str, ...], tokens_used: int) -> None:
+    for warning in warnings:
         typer.secho(f"Note: {warning}", fg=typer.colors.YELLOW)
-    if response.tokens_used:
-        typer.echo(f"({response.tokens_used} model tokens)")
+    if tokens_used:
+        typer.echo(f"({tokens_used} model tokens)")
+
+
+# --- research (F03) ----------------------------------------------------------
+
+
+@app.command("research")
+def research(
+    objective: Annotated[str, typer.Argument(help="Your research question, in quotes.")],
+    max_steps: Annotated[int, typer.Option(min=1, max=20, help="Most research steps to run.")] = ResearchBudget().max_iterations,
+    max_tool_calls: Annotated[int, typer.Option(min=1, max=40, help="Most library searches to make.")] = ResearchBudget().max_tool_calls,
+) -> None:
+    """Research a question in several steps: plan, gather sources, then analyse them."""
+    budget = ResearchBudget(max_iterations=max_steps, max_tool_calls=max_tool_calls)
+    with session() as application:
+        result = application.agent.research(objective, budget)
+    _print_research(result)
+
+
+def _print_research(result: ResearchResult) -> None:
+    typer.secho("Research steps", bold=True)
+    for number, step in enumerate(result.session.steps, start=1):
+        mark = "✓" if step.succeeded else "✗"
+        detail = f"  +{len(step.new_sources)} sources" if step.new_sources else ""
+        if step.retry_of is not None:
+            detail += f"  (retry of step {step.retry_of + 1})"
+        if step.error:
+            detail += f"  — {step.error}"
+        typer.echo(f"  {number}. {mark} {step.description}{detail}")
+    if result.stop_reason:
+        typer.echo(f"  Stopped: {result.stop_reason.value}.")
+    typer.echo()
+
+    _print_sources(result.sources, result.cited, result.purposes)
+    if result.status is ResponseStatus.ANSWERED and result.summary:
+        _print_ai_text("Analysis", result.summary, result.personalized)
+    if result.open_questions:
+        typer.secho("Open questions (AI-generated)", bold=True)
+        for question in result.open_questions:
+            typer.echo(textwrap.fill(question, width=86, initial_indent="  - ", subsequent_indent="    "))
+        typer.echo()
+    readings = result.get_recommended_readings()
+    if readings:
+        typer.secho("Further reading", bold=True)
+        for reading in readings:
+            typer.echo(f"  {str(reading.document_id)[:8]}  {reading.title} — {reading.author}")
+        typer.echo()
+    _print_warnings(result.warnings, result.session.tokens_used)
 
 
 # --- library (F05) -----------------------------------------------------------
