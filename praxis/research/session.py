@@ -66,7 +66,10 @@ class ResearchSession:
     iteration_count: int = 0
     tool_call_count: int = 0
     llm_call_count: int = 0
+    tokens_used: int = 0
     steps: list[StepRecord] = field(default_factory=list)
+    # Things the reader should know about how the run went.
+    warnings: list[str] = field(default_factory=list)
     failure_reason: str | None = None
 
     def __post_init__(self) -> None:
@@ -82,9 +85,14 @@ class ResearchSession:
         self._require_running()
         self.tool_call_count += 1
 
-    def increment_llm_calls(self) -> None:
+    def increment_llm_calls(self, tokens: int = 0) -> None:
         self._require_running()
         self.llm_call_count += 1
+        self.tokens_used += tokens
+
+    def add_warning(self, warning: str) -> None:
+        if warning not in self.warnings:
+            self.warnings.append(warning)
 
     def record_step(self, step: StepRecord) -> int:
         """Append ``step`` and return its index."""

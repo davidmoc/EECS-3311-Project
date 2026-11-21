@@ -14,6 +14,35 @@ from praxis.reader_model import ExplanationDepth, ReaderProfile
 
 MAX_SEARCH_TERMS = 8
 MAX_KNOWLEDGE_LINES = 12
+MAX_PLAN_STEPS = 5
+PLAN_STEP_KINDS = ("evidence", "theory", "history")
+
+# "history: 1848 revolution, bourgeoisie", optionally bulleted or numbered.
+_PLAN_LINE = re.compile(
+    r"^\s*(?:[-*•]|\d+[.)])?\s*(evidence|theory|history)\s*:\s*(.+?)\s*$",
+    re.IGNORECASE,
+)
+
+RESEARCH_PLAN_RULES = """\
+You plan research for Praxis, a platform for studying politics, history and \
+Marxist theory from primary sources. The library holds political theory and \
+history texts, mostly 19th and early 20th century translations, searched by \
+keyword.
+
+Write a research plan of 2 to 5 steps for the reader's question, one step \
+per line, in exactly this form:
+evidence: <keywords>
+theory: <keywords>
+history: <keywords>
+
+- evidence: passages that bear directly on the question.
+- theory: theoretical concepts needed to analyse it (for example class, \
+value, the state).
+- history: how the situation or its conditions developed over time.
+
+Use keywords and short phrases in the vocabulary those texts would use, not \
+full sentences. Leave out author names. Include at least one evidence step. \
+No other text."""
 
 SOURCE_FIRST_RULES = """\
 You are the research assistant of Praxis, a platform for studying politics, \
@@ -62,6 +91,32 @@ class PromptBuilder:
         terms = [t.strip(" .\"'*-") for t in re.split(r"[,\n;]", text)]
         unique = dict.fromkeys(t for t in terms if t)
         return list(unique)[:MAX_SEARCH_TERMS]
+
+    def build_plan_prompt(self, objective: str, profile: ReaderProfile | None = None) -> Prompt:
+        system = RESEARCH_PLAN_RULES
+        context = reader_context(profile)
+        if context:
+            system += (
+                f"\n\nAbout the reader:\n{context}\n"
+                "Add a theory step for a concept the reader is unlikely to know "
+                "if the question depends on it."
+            )
+        return Prompt(system=system, user=objective)
+
+    @staticmethod
+    def parse_plan(text: str) -> list[tuple[str, str]]:
+        """``(kind, keywords)`` pairs from the model's plan, in order.
+
+        Lines not in the expected form are ignored, as are repeats.
+        """
+        steps: dict[tuple[str, str], None] = {}
+        for line in text.splitlines():
+            match = _PLAN_LINE.match(line)
+            if match:
+                keywords = " ".join(match.group(2).strip(" .\"'").split())
+                if keywords:
+                    steps.setdefault((match.group(1).lower(), keywords), None)
+        return list(steps)[:MAX_PLAN_STEPS]
 
     def build_question_prompt(
         self,

@@ -34,11 +34,15 @@ def test_counters_and_steps_accumulate():
     session.increment_iteration()
     session.increment_tool_calls()
     session.increment_tool_calls()
-    session.increment_llm_calls()
+    session.increment_llm_calls(tokens=40)
+    session.add_warning("planner fell back")
+    session.add_warning("planner fell back")
     first = session.record_step(StepRecord("Retrieve evidence: wages", True, (1, 2)))
     second = session.record_step(StepRecord("Retry", False, error="down", retry_of=first))
 
     assert (session.iteration_count, session.tool_call_count, session.llm_call_count) == (1, 2, 1)
+    assert session.tokens_used == 40
+    assert session.warnings == ["planner fell back"]
     assert (first, second) == (0, 1)
     assert session.steps[1].retry_of == 0
 
