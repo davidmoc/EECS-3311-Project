@@ -9,7 +9,9 @@ says it could not verify is kept on the annotation as its uncertainties.
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
+from uuid import UUID
 
 from praxis.agent import check_citations
 from praxis.agent.corpus import ResearchCorpus
@@ -17,6 +19,7 @@ from praxis.agent.prompts import PromptBuilder, reader_context
 from praxis.documents import Annotation, AnnotationType, Document, Passage
 from praxis.llm import LLMClient, LLMError
 from praxis.reader_model import ReaderProfile
+from praxis.persistence import AnnotationRepository
 from praxis.tools import ToolManager
 
 PASSAGE_SEARCH = "passage_search"
@@ -40,6 +43,7 @@ UNKNOWN_CITATION_WARNING = (
     "The annotation refers to {labels}, which {verb} not among its sources; "
     "treat those statements as unsupported."
 )
+NOT_STORED_WARNING = "The annotation could not be stored, so it will not be shown again: {}"
 NO_CONTEXT_WARNING = (
     "No other library passage bears on this passage, so the annotation "
     "rests on the text itself and general background."
@@ -72,10 +76,41 @@ class AnnotationService:
         tools: ToolManager,
         llm: LLMClient | None = None,
         prompts: PromptBuilder | None = None,
+        repository: AnnotationRepository | None = None,
     ) -> None:
+        """Without ``repository``, annotations are generated but not stored."""
         self._tools = tools
         self._llm = llm
         self._prompts = prompts or PromptBuilder()
+        self._repository = repository
+
+    # --- existing annotations (UC06 step 4) ----------------------------------
+
+    def get_annotations(self, passage_id: UUID) -> list[Annotation]:
+        """The passage's stored annotations, oldest first."""
+        return self._repository.for_passage(passage_id) if self._repository else []
+
+    def annotations_for(self, document: Document) -> list[Annotation]:
+        """All of the document's stored annotations, in text order."""
+        return self._repository.for_document(document.id) if self._repository else []
+
+    def find_annotation(self, id_prefix: str) -> UUID:
+        """The stored annotation whose id starts with ``id_prefix``."""
+        prefix = id_prefix.strip().lower()
+        if not prefix:
+            raise AnnotationError("An annotation id is required.")
+        matches = self._repository.find_ids(prefix) if self._repository else []
+        if not matches:
+            raise AnnotationError(f"No annotation with id starting '{prefix}'.")
+        if len(matches) > 1:
+            raise AnnotationError(f"Id '{prefix}' matches {len(matches)} annotations; use more characters.")
+        return matches[0]
+
+    def remove_annotation(self, annotation_id: UUID) -> None:
+        if self._repository is None or not self._repository.delete(annotation_id):
+            raise AnnotationError(f"There is no annotation {annotation_id}.")
+
+    # --- new annotations (SD04) ----------------------------------------------
 
     def generate_annotation(
         self,
@@ -138,6 +173,11 @@ class AnnotationService:
             uncertainties=tuple(uncertainties),
             personalized=reader_context(profile) is not None,
         )
+        if self._repository is not None:
+            try:
+                self._repository.save(annotation)
+            except sqlite3.Error as exc:
+                warnings.append(NOT_STORED_WARNING.format(exc))
         return AnnotationResult(
             annotation,
             warnings=tuple(warnings),

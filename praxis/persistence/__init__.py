@@ -1,3 +1,4 @@
+from praxis.persistence.annotations import AnnotationRepository, SQLAnnotationRepository
 from praxis.persistence.database import Database
 from praxis.persistence.documents import (
     DocumentRepository,
@@ -11,10 +12,12 @@ from praxis.persistence.profiles import (
 from praxis.persistence.workspaces import SQLWorkspaceRepository, WorkspaceRepository
 
 __all__ = [
+    "AnnotationRepository",
     "Database",
     "DocumentRepository",
     "PassageMatch",
     "ReaderProfileRepository",
+    "SQLAnnotationRepository",
     "SQLDocumentRepository",
     "SQLReaderProfileRepository",
     "SQLWorkspaceRepository",

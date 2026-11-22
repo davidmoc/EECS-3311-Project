@@ -67,6 +67,23 @@ CREATE TABLE IF NOT EXISTS research_sessions (
     updated_at   TEXT NOT NULL,
     data         TEXT NOT NULL
 );
+
+-- AI annotations on passages (F06). paragraph is the number in the
+-- passage's ¶ locator, so a text's annotations can be listed in text
+-- order. data holds the locator, uncertainties and sources (JSON).
+CREATE TABLE IF NOT EXISTS annotations (
+    id           TEXT PRIMARY KEY,
+    passage_id   TEXT NOT NULL,
+    document_id  TEXT NOT NULL,
+    paragraph    INTEGER NOT NULL,
+    type         TEXT NOT NULL,
+    content      TEXT NOT NULL,
+    created_at   TEXT NOT NULL,
+    personalized INTEGER NOT NULL,
+    data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS annotations_by_passage ON annotations (passage_id);
+CREATE INDEX IF NOT EXISTS annotations_by_document ON annotations (document_id, paragraph);
 """
 
 
