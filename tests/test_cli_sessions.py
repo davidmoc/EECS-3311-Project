@@ -82,3 +82,23 @@ def test_unknown_session_and_empty_list(run):
     result = run("sessions", "show", "deadbeef")
     assert result.exit_code == 1
     assert "No research session with id starting 'deadbeef'." in result.output
+
+
+def test_saved_research_is_reopened_from_the_workspace(seeded, run, monkeypatch, cli_database):
+    use_llm(monkeypatch, cli_database, PLAN, "verdict: sufficient", SYNTHESIS)
+    first = run("research", QUESTION, "--save", "--tag", "1848")
+    short = session_id(first.output)
+    item = re.search(r"Saved to your workspace \[([0-9a-f]{8})\]", first.output).group(1)
+
+    opened = run("workspace", "open", item)
+
+    assert opened.exit_code == 0, opened.output
+    assert f"[research] Research: {QUESTION}" in opened.output
+    assert "Analysis (AI-generated):" in opened.output
+    assert f"→ praxis sessions continue {short}" in opened.output
+
+    # Continuing and saving again updates the same workspace item.
+    use_llm(monkeypatch, cli_database, "theory: wage labour", "verdict: sufficient", SYNTHESIS)
+    again = run("sessions", "continue", short, "--focus", "wages", "--save")
+    assert f"Saved to your workspace [{item}]" in again.output
+    assert run("workspace", "list").output.count("Research: ") == 1

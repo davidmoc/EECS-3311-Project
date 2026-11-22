@@ -11,11 +11,13 @@ from datetime import datetime
 from uuid import UUID
 
 from praxis.agent import AgentResponse
+from praxis.research.result import ResearchResult
 from praxis.documents import Document, Passage
 from praxis.persistence import WorkspaceRepository
 from praxis.workspace.models import SavedItem, SavedItemKind, Workspace
 
 Clock = Callable[[], datetime]
+RESEARCH_REFERENCE = "research:"
 
 
 class WorkspaceError(ValueError):
@@ -85,6 +87,24 @@ class WorkspaceService:
             )
         )
 
+    def save_research(
+        self, result: ResearchResult, note: str = "", tags: tuple[str, ...] = ()
+    ) -> SavedItem:
+        """Save a research result with a snapshot of its analysis and
+        sources. The item refers to the research session, so it can be
+        reopened and continued; saving the session again updates it."""
+        return self.save_item(
+            SavedItem(
+                kind=SavedItemKind.RESEARCH,
+                title=f"Research: {result.objective}",
+                reference=f"{RESEARCH_REFERENCE}{result.session.id}",
+                content=render_research(result),
+                note=note,
+                tags=tags,
+                saved_at=self._clock(),
+            )
+        )
+
     def add_note(self, title: str, text: str = "", tags: tuple[str, ...] = ()) -> SavedItem:
         return self.save_item(
             SavedItem(SavedItemKind.NOTE, title, content=text, tags=tags, saved_at=self._clock())
@@ -124,6 +144,16 @@ class WorkspaceService:
             return None
 
     @staticmethod
+    def research_session_of(item: SavedItem) -> UUID | None:
+        """The research session a saved research result came from, if any."""
+        if item.kind is not SavedItemKind.RESEARCH or not item.reference.startswith(RESEARCH_REFERENCE):
+            return None
+        try:
+            return UUID(item.reference[len(RESEARCH_REFERENCE):])
+        except ValueError:
+            return None
+
+    @staticmethod
     def paragraph_of(item: SavedItem) -> int | None:
         """For a saved passage, its paragraph number (from the ``¶n`` locator)."""
         if item.kind is not SavedItemKind.PASSAGE or "#¶" not in item.reference:
@@ -147,4 +177,25 @@ def render_answer(response: AgentResponse) -> str:
             )
         )
     parts.extend(f"Note: {warning}" for warning in response.warnings)
+    return "\n\n".join(parts)
+
+
+def render_research(result: ResearchResult) -> str:
+    """Plain-text snapshot of a research result: the analysis (marked as
+    AI), the open questions, then the sources with their quoted text."""
+    parts = []
+    if result.is_incomplete:
+        parts.append("This research is incomplete.")
+    if result.summary:
+        parts.append(f"Analysis (AI-generated):\n{result.summary}")
+    if result.open_questions:
+        parts.append("Open questions:\n" + "\n".join(f"- {q}" for q in result.open_questions))
+    if result.sources:
+        parts.append(
+            "Sources:\n"
+            + "\n\n".join(
+                f"{s.label} {s.citation.format()}\n{s.citation.quoted_text}" for s in result.sources
+            )
+        )
+    parts.extend(f"Note: {warning}" for warning in result.warnings)
     return "\n\n".join(parts)

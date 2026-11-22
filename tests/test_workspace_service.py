@@ -146,3 +146,21 @@ def test_saving_the_same_question_again_replaces_the_answer(service):
     assert second.id == first.id
     assert len(service.get_workspace().items) == 1
     assert "Supply [1]." in second.content
+
+
+def test_research_results_are_saved_with_a_session_reference():
+    from praxis.agent import ResponseStatus
+    from praxis.research import ResearchSession
+    from praxis.research.result import ResearchResult
+    from praxis.workspace.service import render_research
+
+    session = ResearchSession("Why did 1848 fail?")
+    result = ResearchResult(session, ResponseStatus.NO_SOURCES, None)
+    service = WorkspaceService(SQLWorkspaceRepository(Database()))
+
+    item = service.save_research(result, tags=("1848",))
+
+    assert item.title == "Research: Why did 1848 fail?"
+    assert service.research_session_of(item) == session.id
+    assert render_research(result).startswith("This research is incomplete.")
+    assert service.research_session_of(service.add_note("x")) is None

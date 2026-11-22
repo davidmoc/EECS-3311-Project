@@ -166,13 +166,32 @@ def research(
     objective: Annotated[str, typer.Argument(help="Your research question, in quotes.")],
     max_steps: MaxSteps = ResearchBudget().max_iterations,
     max_tool_calls: MaxToolCalls = ResearchBudget().max_tool_calls,
+    save: Annotated[bool, typer.Option("--save", help="Save the result to your workspace.")] = False,
+    tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t", help="Tag for the saved result; repeatable.")] = None,
 ) -> None:
     """Research a question in several steps: plan, gather sources, then analyse them."""
     budget = ResearchBudget(max_iterations=max_steps, max_tool_calls=max_tool_calls)
     with session() as application:
         result = application.agent.research(objective, budget)
+        saved = _save_research(application, result, save, tag)
     _print_research(result)
     _print_continue_hint(result)
+    _print_saved(saved, save)
+
+
+def _save_research(
+    application: Application, result: ResearchResult, save: bool, tag: list[str] | None
+) -> SavedItem | None:
+    if save and result.sources:
+        return application.workspace.save_research(result, tags=tuple(tag or ()))
+    return None
+
+
+def _print_saved(saved: SavedItem | None, requested: bool) -> None:
+    if saved:
+        typer.echo(f"Saved to your workspace [{str(saved.id)[:8]}]")
+    elif requested:
+        typer.echo("Nothing was saved: there were no sources to keep.")
 
 
 def _print_continue_hint(result: ResearchResult) -> None:
@@ -289,14 +308,18 @@ def sessions_continue(
     focus: Annotated[Optional[str], typer.Option("--focus", "-f", help="What to follow up on, in quotes.")] = None,
     max_steps: MaxSteps = ResearchBudget().max_iterations,
     max_tool_calls: MaxToolCalls = ResearchBudget().max_tool_calls,
+    save: Annotated[bool, typer.Option("--save", help="Save the result to your workspace.")] = False,
+    tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t", help="Tag for the saved result; repeatable.")] = None,
 ) -> None:
     """Run another round of earlier research: a new direction, or the steps left unrun."""
     budget = ResearchBudget(max_iterations=max_steps, max_tool_calls=max_tool_calls)
     with session() as application:
         agent = application.agent
         result = agent.continue_research(agent.find_research(session_id), focus, budget)
+        saved = _save_research(application, result, save, tag)
     _print_research(result)
     _print_continue_hint(result)
+    _print_saved(saved, save)
 
 
 # --- library (F05) -----------------------------------------------------------
@@ -601,6 +624,7 @@ def workspace_open(item_id: Annotated[str, typer.Argument(help="Item id or prefi
     """Show a saved item and how to continue from it."""
     with session() as application:
         item = application.workspace.get_item(item_id)
+        research_id = application.workspace.research_session_of(item)
         document_id = application.workspace.document_id_of(item)
         paragraph = application.workspace.paragraph_of(item)
         still_available = False
@@ -619,6 +643,10 @@ def workspace_open(item_id: Annotated[str, typer.Argument(help="Item id or prefi
         typer.echo(textwrap.fill(item.content, width=88))
     if item.note:
         typer.echo(f"\nNote: {item.note}")
+    if research_id is not None:
+        short = str(research_id)[:8]
+        typer.echo(f"\n→ praxis sessions show {short}")
+        typer.echo(f'→ praxis sessions continue {short} --focus "..."')
     if document_id is None:
         return
     if not still_available:
