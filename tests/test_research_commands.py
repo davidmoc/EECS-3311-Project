@@ -6,6 +6,8 @@ from praxis.persistence import SQLDocumentRepository
 from praxis.research import ResearchError, ResearchSession
 from praxis.research.commands import (
     MAX_ATTEMPTS,
+    InvestigateContradictionCommand,
+    InvestigateRelationCommand,
     ResearchContext,
     RetrieveEvidenceCommand,
     RetrieveTheoryCommand,
@@ -118,3 +120,21 @@ def test_plan_puts_retries_first_and_can_be_replaced():
 
     plan.replace_commands([TraceHistoricalDevelopmentCommand("enclosure")])
     assert plan.pending == [TraceHistoricalDevelopmentCommand("enclosure")]
+
+
+def test_plan_never_queues_an_action_that_has_already_run():
+    plan = ResearchPlan("wages", [RetrieveEvidenceCommand("wages")])
+    plan.get_next_command()
+
+    assert not plan.add_command(RetrieveEvidenceCommand("Wages"))  # same search, other case
+    assert plan.add_command(RetrieveTheoryCommand("wages"))  # same words, other purpose
+    assert plan.pending == [RetrieveTheoryCommand("wages")]
+
+
+def test_investigation_commands_record_their_own_purpose(library_database):
+    context = make_context(library_database)
+    InvestigateRelationCommand("bourgeoisie").execute(context)
+    InvestigateContradictionCommand("wage labour").execute(context)
+
+    assert set(context.purposes.values()) == {"relation", "contradiction"}
+    assert InvestigateRelationCommand("x").describe() == "Investigate relation: x"

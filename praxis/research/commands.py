@@ -87,6 +87,12 @@ class ResearchCommand(ABC):
             raise ResearchError(f"'{self.describe()}' has no attempts left.")
         return type(self)(self.query, self.attempt + 1)
 
+    @property
+    def key(self) -> tuple[type, str]:
+        """What makes two commands the same action, whatever the attempt
+        or letter case."""
+        return (type(self), self.query.casefold())
+
     def __eq__(self, other: object) -> bool:
         return (
             type(other) is type(self)
@@ -155,8 +161,26 @@ class TraceHistoricalDevelopmentCommand(_PassageRetrievalCommand):
     label = "Trace historical development"
 
 
+class InvestigateRelationCommand(_PassageRetrievalCommand):
+    """Find material on a class, production, institutional or ideological
+    relation the assessment found missing."""
+
+    purpose = "relation"
+    label = "Investigate relation"
+
+
+class InvestigateContradictionCommand(_PassageRetrievalCommand):
+    """Find material on a contradiction the assessment wants developed."""
+
+    purpose = "contradiction"
+    label = "Investigate contradiction"
+
+
+# Plan-line and follow-up kinds -> the command that carries them out.
 COMMAND_TYPES: dict[str, type[ResearchCommand]] = {
     "evidence": RetrieveEvidenceCommand,
     "theory": RetrieveTheoryCommand,
     "history": TraceHistoricalDevelopmentCommand,
+    "relation": InvestigateRelationCommand,
+    "contradiction": InvestigateContradictionCommand,
 }

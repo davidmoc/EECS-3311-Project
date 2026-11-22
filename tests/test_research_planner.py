@@ -6,11 +6,15 @@ from praxis.agent import PromptBuilder
 from praxis.llm import LLMError
 from praxis.reader_model import KnowledgeLevel, ReaderProfile
 from praxis.research import ResearchSession
+from praxis.research.assessment import FollowUp, ResearchAssessment
 from praxis.research.commands import (
+    InvestigateContradictionCommand,
+    InvestigateRelationCommand,
     RetrieveEvidenceCommand,
     RetrieveTheoryCommand,
     TraceHistoricalDevelopmentCommand,
 )
+from praxis.research.plan import ResearchPlan
 from praxis.research.planner import FALLBACK_PLAN_WARNING, ResearchPlanner
 
 OBJECTIVE = "Why did the German revolution of 1848 fail?"
@@ -92,3 +96,37 @@ def test_plan_prompt_mentions_the_reader_only_when_known():
 
     assert "About the reader" in personal.system
     assert "About the reader" not in general.system
+
+
+# --- revise_plan ---------------------------------------------------------------
+
+
+def test_revision_queues_the_assessments_follow_ups_once():
+    plan = ResearchPlan(OBJECTIVE, [RetrieveEvidenceCommand("bourgeoisie")])
+    plan.get_next_command()  # already run
+    plan.add_command(TraceHistoricalDevelopmentCommand("Frankfurt assembly"))  # already queued
+    assessment = ResearchAssessment(
+        follow_ups=(
+            FollowUp("relation", "peasants landlords"),
+            FollowUp("evidence", "bourgeoisie"),
+            FollowUp("history", "Frankfurt assembly"),
+            FollowUp("contradiction", "town and country"),
+        ),
+        requires_more_research=True,
+    )
+
+    added = ResearchPlanner(None).revise_plan(plan, assessment)
+
+    assert added == [
+        InvestigateRelationCommand("peasants landlords"),
+        InvestigateContradictionCommand("town and country"),
+    ]
+    assert plan.pending == [TraceHistoricalDevelopmentCommand("Frankfurt assembly"), *added]
+
+
+def test_no_revision_when_the_research_is_judged_sufficient():
+    plan = ResearchPlan(OBJECTIVE)
+    assessment = ResearchAssessment(follow_ups=(FollowUp("theory", "value"),), requires_more_research=False)
+
+    assert ResearchPlanner(None).revise_plan(plan, assessment) == []
+    assert plan.is_complete()

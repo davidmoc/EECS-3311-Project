@@ -10,6 +10,7 @@ from __future__ import annotations
 from praxis.agent.prompts import PromptBuilder
 from praxis.llm import LLMClient, LLMError
 from praxis.reader_model import ReaderProfile
+from praxis.research.assessment import ResearchAssessment
 from praxis.research.commands import (
     COMMAND_TYPES,
     ResearchCommand,
@@ -45,6 +46,21 @@ class ResearchPlanner:
             commands = [RetrieveTheoryCommand(objective)]
         commands.append(RetrieveEvidenceCommand(objective))
         return ResearchPlan(objective, commands)
+
+    def revise_plan(
+        self, plan: ResearchPlan, assessment: ResearchAssessment
+    ) -> list[ResearchCommand]:
+        """Queue the assessment's follow-up searches and return the commands
+        added. Searches already queued or run are not added again, so an
+        empty list means the assessment found nothing new to do."""
+        if not assessment.requires_more_research:
+            return []
+        added = []
+        for follow_up in assessment.follow_ups:
+            command = COMMAND_TYPES[follow_up.kind](follow_up.keywords)
+            if plan.add_command(command):
+                added.append(command)
+        return added
 
     def revise_after_failure(
         self,
