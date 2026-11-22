@@ -33,11 +33,21 @@ class SourceSelection:
 
     document_id: UUID
     paragraphs: tuple[int, ...] = ()
+    # Only for messages about the source; the id is what identifies it.
+    title: str = field(default="", compare=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "paragraphs", tuple(self.paragraphs))
         if any(n < 1 for n in self.paragraphs):
             raise ValueError("Paragraph numbers start at 1.")
+
+    @classmethod
+    def of(cls, document: Document, paragraphs: tuple[int, ...] = ()) -> SourceSelection:
+        return cls(document.id, paragraphs, document.title)
+
+    @property
+    def label(self) -> str:
+        return self.title or str(self.document_id)[:8]
 
 
 @dataclass(frozen=True)

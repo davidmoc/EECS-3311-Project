@@ -13,6 +13,16 @@ from uuid import UUID
 from praxis.agent.corpus import ResearchCorpus, Source, cited_numbers
 from praxis.agent.prompts import PromptBuilder, reader_context
 from praxis.agent.response import AgentResponse, ResponseStatus
+from praxis.comparison import (
+    Comparability,
+    SourceComparison,
+    SourceProfile,
+    SourceSelection,
+    check_points,
+    parse_comparison,
+)
+from praxis.comparison.command import CompareSourcesCommand
+from praxis.documents import Document
 from praxis.llm import LLMClient, LLMError
 from praxis.reader_model.service import ReaderProfileService
 from praxis.research.assessment import ResearchAssessment
@@ -63,6 +73,22 @@ NOT_SAVED_WARNING = "The research could not be saved, so it cannot be continued 
 NO_SYNTHESIS_BUDGET = (
     "The model-call limit was used up before the findings could be written "
     "up, so only the sources are shown."
+)
+
+MAX_COMPARED_SOURCES = 4
+# What a comparison is "on" when the reader named paragraphs but no subject.
+SELECTED_PASSAGES = "the selected passages"
+TOO_FEW_TO_COMPARE = (
+    "Fewer than two of the chosen sources had passages to compare, so no "
+    "comparison was made."
+)
+COMPARISON_UNREADABLE = (
+    "The comparison could not be read, so only the passages are shown; "
+    "compare them directly."
+)
+LOW_COMPARABILITY = (
+    "These sources are not sufficiently comparable{reason} A direct "
+    "comparison could mislead."
 )
 
 
@@ -351,6 +377,87 @@ class PoliticalResearchAgent:
             plan=plan,
         )
 
+    # --- F10: source and framing comparison --------------------------------
+
+    def compare_sources(
+        self, selections: list[SourceSelection], subject: str = ""
+    ) -> SourceComparison:
+        """Compare how the chosen sources treat ``subject`` (SD06).
+
+        Each source is retrieved through the tool layer, then the model
+        compares the passages. The passages are always returned; without
+        a model, or if it fails, they are all the reader gets.
+        """
+        selections = list(dict.fromkeys(selections))
+        if len({s.document_id for s in selections}) < 2:
+            raise AgentError("Choose at least two different sources to compare.")
+        if len(selections) > MAX_COMPARED_SOURCES:
+            raise AgentError(f"Compare at most {MAX_COMPARED_SOURCES} sources at a time.")
+        subject = " ".join(subject.split())
+        if not subject and any(not s.paragraphs for s in selections):
+            raise AgentError(
+                "Say what to compare the sources on, or name the paragraphs to compare."
+            )
+
+        profile = self._profiles.get_profile()
+        session = ResearchSession(subject or SELECTED_PASSAGES)
+        context = ResearchContext(session, self._tools, profile=profile)
+        CompareSourcesCommand(subject or SELECTED_PASSAGES, tuple(selections)).execute(context)
+        warnings = list(session.warnings)
+
+        groups = _passages_by_source(context.corpus)
+        profiles = tuple(SourceProfile.of(document) for document, _ in groups)
+        passages = tuple(context.corpus.sources)
+
+        def result(**fields) -> SourceComparison:
+            return SourceComparison(
+                subject or SELECTED_PASSAGES, profiles, passages,
+                warnings=tuple(warnings), **fields,
+            )
+
+        if len(groups) < 2:
+            warnings.append(TOO_FEW_TO_COMPARE)
+            return result()
+        if self._llm is None:
+            warnings.append(NO_LLM_WARNING)
+            return result()
+
+        prompt = self._prompts.build_comparison_prompt(
+            subject or SELECTED_PASSAGES,
+            [(source.describe(), passages) for source, (_, passages) in zip(profiles, groups)],
+            profile,
+        )
+        try:
+            response = self._llm.generate(prompt)
+        except LLMError as exc:
+            warnings.append(f"The comparison could not be generated: {exc}")
+            return result()
+
+        parsed = parse_comparison(response.text)
+        if parsed is None:
+            warnings.append(COMPARISON_UNREADABLE)
+            return result(tokens_used=response.total_tokens)
+        source_of = {source.number: source.citation.document_id for source in passages}
+        points, dropped = check_points(parsed.points, source_of)
+        if dropped:
+            warnings.append(
+                f"{dropped} point{'s' if dropped != 1 else ''} of the comparison did not "
+                f"cite the passages {'they' if dropped != 1 else 'it'} compared and "
+                f"{'were' if dropped != 1 else 'was'} left out."
+            )
+        if parsed.comparability is Comparability.LOW:
+            note = parsed.comparability_note.rstrip(".")
+            reason = f": {note}." if note else "."
+            warnings.insert(0, LOW_COMPARABILITY.format(reason=reason))
+        return result(
+            points=tuple(points),
+            comparability=parsed.comparability,
+            comparability_note=parsed.comparability_note,
+            uncertainties=parsed.uncertainties,
+            personalized=reader_context(profile) is not None,
+            tokens_used=response.total_tokens,
+        )
+
     # --- F04: source-first question answering ------------------------------
 
     def answer_question(self, question: str) -> AgentResponse:
@@ -459,6 +566,15 @@ class PoliticalResearchAgent:
                     return corpus
                 corpus.add_passage(match.document, match.passage)
         return corpus
+
+
+def _passages_by_source(corpus: ResearchCorpus) -> list[tuple[Document, list[Source]]]:
+    """The corpus's passages grouped by document, in the order first added."""
+    documents = {document.id: document for document in corpus.documents}
+    groups: dict[UUID, list[Source]] = {}
+    for source in corpus.sources:
+        groups.setdefault(source.citation.document_id, []).append(source)
+    return [(documents[document_id], sources) for document_id, sources in groups.items()]
 
 
 def check_citations(text: str, corpus: ResearchCorpus) -> tuple[list[Source], list[int]]:
