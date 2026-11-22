@@ -1,8 +1,10 @@
 """The news commands (F01)."""
 
+import re
 from datetime import date, timedelta
 
 import pytest
+from conftest import ScriptedLLM
 
 from praxis import app as app_module
 from praxis.cli import commands
@@ -97,3 +99,70 @@ def test_news_stays_out_of_library_browse_but_can_be_read(run, monkeypatch, cli_
     read = run("library", "read", short)
     assert read.exit_code == 0, read.output
     assert "Dockworkers walked out" in read.output
+
+
+# --- the dashboard -----------------------------------------------------------------
+
+FIRE = (
+    NewsArticle(title="Fire at Indonesian candy factory kills three", author="Staff", outlet="Wire A",
+                publication_date=TODAY, text="A fire at a candy factory in Indonesia killed three workers.",
+                source_url="https://a.example/fire"),
+    NewsArticle(title="Indonesian candy factory fire leaves dozens missing", author="Staff", outlet="Wire B",
+                publication_date=TODAY, text="Dozens of workers are missing after a candy factory fire in Indonesia.",
+                source_url="https://b.example/fire"),
+)
+CARD = (
+    "title: Fire at Indonesian candy factory\n"
+    "summary: Three workers died [1] and dozens are missing [2].\n"
+    "category: labour\nsame event: yes"
+)
+
+
+def use_news(monkeypatch, cli_database, llm, *providers):
+    monkeypatch.setattr(
+        commands, "application_factory",
+        lambda: app_module.build_application(
+            Settings(openai_api_key=None), cli_database, llm, news_providers=list(providers)
+        ),
+    )
+
+
+def test_dashboard_shows_event_cards(run, monkeypatch, cli_database):
+    use_news(
+        monkeypatch, cli_database, ScriptedLLM(CARD),
+        StaticProvider("Wires", *FIRE, article("Liverpool thrash United", "Wire C")),
+    )
+    result = run("news", "dashboard")
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert "News dashboard: the 2 most widely reported of 2 events (3 reports)" in out
+    assert re.search(r"1\. Fire at Indonesian candy factory  \[[0-9a-f]{8}\]", out)
+    assert "labour · 2 outlets: Wire A, Wire B" in out
+    assert "Summary (AI-generated from the reports): Three workers died [1]" in out
+    assert "[1] Wire A: Fire at Indonesian candy factory kills three" in out
+    assert "2. Liverpool thrash United" in out
+    assert "Single report: no other outlet in the feeds has reported it." in out
+    assert "Wire C writes: Dockworkers walked out" in out
+    assert "(15 model tokens)" in out
+
+
+def test_dashboard_without_a_model_shows_headlines(run, monkeypatch, cli_database):
+    use_news(monkeypatch, cli_database, None, StaticProvider("Wires", *FIRE))
+    out = run("news", "dashboard").output
+    assert "No language model is configured" in out
+    assert "No summary is shown; read the reports:" in out
+    assert "Summary (AI-generated" not in out
+
+
+def test_offline_dashboard_uses_stored_news(run, monkeypatch, cli_database):
+    use_news(monkeypatch, cli_database, ScriptedLLM(CARD), StaticProvider("Wires", *FIRE))
+    run("news", "dashboard")
+    use_news(monkeypatch, cli_database, ScriptedLLM(), DownProvider())
+    out = run("news", "dashboard", "--offline").output
+    assert "Fire at Indonesian candy factory" in out
+    assert "No news source could be reached" not in out  # nothing was fetched
+
+
+def test_empty_dashboard(run, monkeypatch, cli_database):
+    use_news(monkeypatch, cli_database, None)
+    assert "No current news is stored" in run("news", "dashboard", "--offline").output

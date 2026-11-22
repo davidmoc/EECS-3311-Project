@@ -25,7 +25,8 @@ from praxis.comparison import Comparability, SourceComparison, SourceSelection
 from praxis.documents import Annotation, AnnotationType, Document
 from praxis.library import LibraryError, SourceReference
 from praxis.news import NewsProviderError
-from praxis.news.service import NewsRefresh
+from praxis.news.events import Event, Grouping, SummaryStatus
+from praxis.news.service import Dashboard, NewsError, NewsRefresh
 from praxis.reader_model import ExplanationDepth, KnowledgeLevel, ReaderProfile
 from praxis.reader_model.events import DocumentRead
 from praxis.reading import AnnotationError, AnnotationResult
@@ -54,7 +55,7 @@ app.add_typer(news_app, name="news")
 application_factory = build_application
 
 # Errors whose message is meant for the user, not a stack trace.
-USER_ERRORS = (AgentError, AnnotationError, LibraryError, NewsProviderError, ResearchError, ValueError)
+USER_ERRORS = (AgentError, AnnotationError, LibraryError, NewsError, NewsProviderError, ResearchError, ValueError)
 
 # Longest stretch of a passage printed by `ask`; the rest is one command away.
 SHOWN_PASSAGE_CHARS = 600
@@ -487,6 +488,68 @@ def _document_of(comparison: SourceComparison, number: int):
 
 
 # --- news (F01) ----------------------------------------------------------------
+
+
+@news_app.command("dashboard")
+def news_dashboard(
+    days: Annotated[int, typer.Option(min=1, max=14, help="How many days of news, today included.")] = 2,
+    limit: Annotated[int, typer.Option(min=1, max=30, help="How many events to show.")] = 8,
+    offline: Annotated[bool, typer.Option("--offline", help="Use the news already stored; fetch nothing.")] = False,
+) -> None:
+    """The main current events: reports grouped by event, each with a short AI summary."""
+    with session() as application:
+        dashboard = application.news.get_dashboard_events(days, limit, refresh=not offline)
+    _print_dashboard(dashboard)
+
+
+def _print_dashboard(dashboard: Dashboard) -> None:
+    for warning in dashboard.warnings:
+        typer.secho(f"Note: {warning}", fg=typer.colors.YELLOW)
+    if not dashboard.events:
+        typer.echo("No current news is stored. Fetch it with: praxis news refresh")
+        return
+    reports = sum(len(e.reports) for e in dashboard.events)
+    typer.secho(
+        f"News dashboard: the {len(dashboard.events)} most widely reported of "
+        f"{dashboard.total_events} events ({reports} reports)", bold=True,
+    )
+    for number, event in enumerate(dashboard.events, start=1):
+        _print_event_card(number, event)
+    if dashboard.tokens_used:
+        typer.echo(f"({dashboard.tokens_used} model tokens)")
+
+
+def _print_event_card(number: int, event: Event) -> None:
+    typer.secho(f"\n{number}. {event.headline}  [{str(event.id)[:8]}]", bold=True)
+    details = [event.last_date.isoformat() if event.last_date else "undated"]
+    if event.categories:
+        details.append(", ".join(event.categories))
+    outlets = event.outlets
+    details.append(f"{len(outlets)} outlet{'s' if len(outlets) != 1 else ''}: {', '.join(outlets)}")
+    typer.echo("   " + " · ".join(details))
+    if event.grouping is Grouping.SINGLE_REPORT:
+        typer.secho("   Single report: no other outlet in the feeds has reported it.", fg=typer.colors.YELLOW)
+    elif event.grouping is Grouping.UNCERTAIN:
+        typer.secho("   Grouping uncertain: these reports may not all be about one event.", fg=typer.colors.YELLOW)
+    if event.is_summarized:
+        typer.echo(textwrap.fill(
+            "Summary (AI-generated from the reports): " + event.summary,
+            width=88, initial_indent="   ", subsequent_indent="   ",
+        ))
+    elif event.grouping is Grouping.SINGLE_REPORT and event.reports[0].text:
+        text = event.reports[0].text.split("\n\n")[0]
+        typer.echo(textwrap.fill(
+            f"{event.reports[0].outlet} writes: {text}",
+            width=88, initial_indent="   ", subsequent_indent="   ",
+        ))
+    if event.note:
+        typer.secho(textwrap.fill(event.note, width=88, initial_indent="   ", subsequent_indent="   "), fg=typer.colors.YELLOW)
+    if event.summary_status is SummaryStatus.HEADLINES_ONLY:
+        typer.secho("   No summary is shown; read the reports:", fg=typer.colors.YELLOW)
+    for index, report in enumerate(event.reports, start=1):
+        typer.echo(textwrap.shorten(
+            f"   [{index}] {report.outlet}: {report.title} ({_short_id(report)})", width=100, placeholder="…",
+        ))
 
 
 @news_app.command("refresh")
