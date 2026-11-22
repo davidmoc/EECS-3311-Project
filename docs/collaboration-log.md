@@ -56,7 +56,7 @@ platform.openai.com.
   - `Citation` carries the document title and author so it can be displayed on its own.
   - `LibrarySearchTool` reads from `DocumentRepository` for now; Stage 1 routes it through `DocumentProvider`.
   - `ToolManager` returns failures as `ToolResult` values instead of raising, so the agent can re-plan.
-- **Human contribution:** _Code review pending._
+- **Human contribution:** Reviewed the code on 2026-11-21, after later slices were built ("i also reviewed the code for the rest of the slices so mark them all as done").
 - **Outcome:** Committed on branch `stage2`.
 
 ### 2026-11-18 — Reading library, reader model, workspace and CLI
@@ -71,7 +71,7 @@ platform.openai.com.
   - `ActivityObserver.onActivity()` is implemented as `on_activity()`; event types `DocumentRead`, `TopicResearched` and `PrerequisiteMarkedKnown` were added (Stage 1 left events untyped).
   - `SavedItem` stores a content snapshot so saved material survives the source disappearing (F15 error case). F15 had no sequence diagram in Stage 1 (section 4 cites a nonexistent SD08).
   - `Application` (`praxis/app.py`) added as a composition root shared by the CLI and the future GUI.
-- **Human contribution:** _Code review pending._
+- **Human contribution:** Reviewed the code on 2026-11-21, after later slices were built ("i also reviewed the code for the rest of the slices so mark them all as done").
 - **Outcome:** Ten commits pushed to `main`.
 
 ### 2026-11-19 — Defects found from call traces
@@ -98,7 +98,7 @@ platform.openai.com.
   - Every `[n]` in the explanation is checked against the retrieved sources. References to sources that were not retrieved, and explanations that cite nothing, produce warnings.
   - `AgentResponse` (used but undefined in Stage 1) has a status (`ANSWERED`, `NO_SOURCES`, `EXPLANATION_FAILED`), keeps passages and explanation separate, and records whether reader context was used.
   - `ResearchController` is not a separate class yet; the `ask` CLI command plays that role.
-- **Human contribution:** _Code review pending._
+- **Human contribution:** Reviewed the code on 2026-11-21, after later slices were built ("i also reviewed the code for the rest of the slices so mark them all as done").
 - **Outcome:** Seven code commits and this documentation commit, pushed to `main`.
 
 ### 2026-11-21 — Defects found from F04 call traces
@@ -153,5 +153,5 @@ platform.openai.com.
   - Two of the five remaining Stage 1 commands now exist: `InvestigateRelationCommand` and `InvestigateContradictionCommand`. Like the first three, they search library passages and record their purpose. `CompareSourcesCommand`, `TestExplanationCommand` and `SynthesizeResearchCommand` are not built.
   - No `MaterialistAnalysis` class yet. The synthesis receives the situation's findings and open questions and adds a "Contradictions" section.
   - Each step now takes 3 passages (was 4), the source list holds 20 (was 12), and the initial plan has at most 4 steps (was 5), so follow-up searches have room after the first round. Default budget raised to 10 steps, 14 tool calls and 240 s.
-- **Human contribution:** _Code review pending._
+- **Human contribution:** Read the live-run findings and asked for the paragraph-number citation fix ("fix the citation prompt"); reviewed the code ("ok, i reviewed the code").
 - **Outcome:** Seven code commits and this documentation commit.
