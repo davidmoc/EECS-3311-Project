@@ -18,18 +18,29 @@ PASSAGES_PER_SOURCE = 3
 MAX_NAMED_PARAGRAPHS = 6
 PURPOSE = "comparison"
 
-NOTHING_ON_SUBJECT = "No passage of “{title}” mentions {subject}, so it was left out of the comparison."
+NOTHING_ON_SUBJECT = "No passage of “{title}” matched {searched}, so it was left out of the comparison."
 RETRIEVAL_FAILED = "A source could not be retrieved ({error}), so it was left out of the comparison."
 
 
 class CompareSourcesCommand(ResearchCommand):
     def __init__(
-        self, subject: str, selections: tuple[SourceSelection, ...], attempt: int = 1
+        self,
+        subject: str,
+        selections: tuple[SourceSelection, ...],
+        attempt: int = 1,
+        keywords: tuple[str, ...] = (),
     ) -> None:
+        """``keywords`` are searched with the subject: a text may name the
+        subject in other words ("allotment farmers" for "the peasantry")."""
         super().__init__(subject, attempt)
         if not selections:
             raise ResearchError("Choose the sources to compare.")
         self.selections = tuple(selections)
+        self.keywords = tuple(k for k in keywords if k.strip())
+
+    @property
+    def search_query(self) -> str:
+        return ", ".join([self.query, *self.keywords])
 
     def describe(self) -> str:
         count = len(self.selections)
@@ -38,7 +49,7 @@ class CompareSourcesCommand(ResearchCommand):
     def retry(self) -> CompareSourcesCommand:
         if not self.can_retry:
             raise ResearchError(f"'{self.describe()}' has no attempts left.")
-        return CompareSourcesCommand(self.query, self.selections, self.attempt + 1)
+        return CompareSourcesCommand(self.query, self.selections, self.attempt + 1, self.keywords)
 
     @property
     def key(self) -> tuple:
@@ -65,7 +76,7 @@ class CompareSourcesCommand(ResearchCommand):
                 tool_input["paragraphs"] = list(selection.paragraphs[:MAX_NAMED_PARAGRAPHS])
                 tool_input["limit"] = MAX_NAMED_PARAGRAPHS
             else:
-                tool_input["query"] = self.query
+                tool_input["query"] = self.search_query
                 tool_input["limit"] = PASSAGES_PER_SOURCE
             result = context.run_tool(SOURCE_RETRIEVAL, tool_input)
             if not result.success:
@@ -73,7 +84,7 @@ class CompareSourcesCommand(ResearchCommand):
                 continue
             if not result.items:
                 context.session.add_warning(
-                    NOTHING_ON_SUBJECT.format(title=selection.label, subject=f"“{self.query}”")
+                    NOTHING_ON_SUBJECT.format(title=selection.label, searched=f"“{self.search_query}”")
                 )
                 continue
             for match in result.items:

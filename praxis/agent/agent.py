@@ -402,7 +402,12 @@ class PoliticalResearchAgent:
         profile = self._profiles.get_profile()
         session = ResearchSession(subject or SELECTED_PASSAGES)
         context = ResearchContext(session, self._tools, profile=profile)
-        CompareSourcesCommand(subject or SELECTED_PASSAGES, tuple(selections)).execute(context)
+        # The reader's words, and the model's keywords for them, are searched.
+        usage = _Usage()
+        keywords = tuple(self._search_terms(subject, usage)) if subject else ()
+        CompareSourcesCommand(
+            subject or SELECTED_PASSAGES, tuple(selections), keywords=keywords
+        ).execute(context)
         warnings = list(session.warnings)
 
         groups = _passages_by_source(context.corpus)
@@ -410,6 +415,7 @@ class PoliticalResearchAgent:
         passages = tuple(context.corpus.sources)
 
         def result(**fields) -> SourceComparison:
+            fields.setdefault("tokens_used", usage.tokens)
             return SourceComparison(
                 subject or SELECTED_PASSAGES, profiles, passages,
                 warnings=tuple(warnings), **fields,
@@ -431,12 +437,12 @@ class PoliticalResearchAgent:
             response = self._llm.generate(prompt)
         except LLMError as exc:
             warnings.append(f"The comparison could not be generated: {exc}")
-            return result()
+            return result(tokens_used=usage.tokens)
 
         parsed = parse_comparison(response.text)
         if parsed is None:
             warnings.append(COMPARISON_UNREADABLE)
-            return result(tokens_used=response.total_tokens)
+            return result(tokens_used=usage.tokens + response.total_tokens)
         source_of = {source.number: source.citation.document_id for source in passages}
         points, dropped = check_points(parsed.points, source_of)
         if dropped:
@@ -455,7 +461,7 @@ class PoliticalResearchAgent:
             comparability_note=parsed.comparability_note,
             uncertainties=parsed.uncertainties,
             personalized=reader_context(profile) is not None,
-            tokens_used=response.total_tokens,
+            tokens_used=usage.tokens + response.total_tokens,
         )
 
     # --- F04: source-first question answering ------------------------------

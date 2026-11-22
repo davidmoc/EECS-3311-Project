@@ -42,7 +42,7 @@ uncertain: whether Lenin quotes this edition
 
 def test_compare_shows_lettered_sources_then_the_marked_comparison(ids, run, monkeypatch, cli_database):
     manifesto, lenin = ids
-    use_llm(monkeypatch, cli_database, REPLY)
+    use_llm(monkeypatch, cli_database, "state, class rule", REPLY)
     result = run("compare", f"{manifesto}:20-21", f"{lenin}:30,31", "--on", "the state")
 
     assert result.exit_code == 0, result.output
@@ -60,6 +60,7 @@ def test_compare_shows_lettered_sources_then_the_marked_comparison(ids, run, mon
     assert "Observations on framing (AI interpretation, not established fact)" in out
     assert "[3] (source B)" in out
     assert "whether Lenin quotes this edition" in out
+    assert "(30 model tokens)" in out
     # The passages come before any AI-generated comparison.
     assert out.index("[4] ¶31") < out.index("Comparability")
 

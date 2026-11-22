@@ -96,6 +96,8 @@ def test_command_equality_includes_the_sources(books):
 
 # --- the agent -------------------------------------------------------------------
 
+KEYWORDS = "state, class rule"
+
 REPLY = """\
 comparability: comparable | both define the state by class rule
 similarity: both tie the state to class rule [1, 3]
@@ -108,7 +110,7 @@ uncertain: whether Lenin had the Manifesto passage in mind
 
 def test_comparison_cites_passages_of_both_sources(database, books):
     manifesto, lenin, _ = books
-    llm = ScriptedLLM(REPLY)
+    llm = ScriptedLLM(KEYWORDS, REPLY)
     # Named paragraphs fix the numbering: [1], [2] are Marx's, [3], [4] Lenin's.
     comparison = agent_for(database, llm).compare_sources(
         [SourceSelection.of(manifesto, (1, 2)), SourceSelection.of(lenin, (1, 2))], "the state"
@@ -124,15 +126,15 @@ def test_comparison_cites_passages_of_both_sources(database, books):
     assert comparison.uncertainties == ("whether Lenin had the Manifesto passage in mind",)
     # The difference citing only the Manifesto is dropped, and the reader told.
     assert any("1 point of the comparison" in w for w in comparison.warnings)
-    assert comparison.tokens_used == 15
-    prompt = llm.prompts[0]
+    assert comparison.tokens_used == 30  # keywords and comparison
+    prompt = llm.prompts[1]
     assert "### Source A: Marx, “Manifesto” (book)" in prompt.user
     assert "### Source B: Lenin, “State and Revolution” (book)" in prompt.user
 
 
 def test_low_comparability_is_a_warning_first(database, books):
     manifesto, lenin, _ = books
-    llm = ScriptedLLM("comparability: not comparable | one is about the state, one about revolution.")
+    llm = ScriptedLLM(KEYWORDS, "comparability: not comparable | one is about the state, one about revolution.")
     comparison = agent_for(database, llm).compare_sources(selections(manifesto, lenin), "the state")
 
     assert not comparison.is_comparable
@@ -141,6 +143,29 @@ def test_low_comparability_is_a_warning_first(database, books):
         "These sources are not sufficiently comparable: one is about the state, "
         "one about revolution. A direct comparison could mislead."
     )
+
+
+def test_the_models_keywords_find_a_source_that_names_the_subject_differently(database, books):
+    """Live run: De Leon's Brumaire says "allotment farmers", not "peasantry"."""
+    manifesto, _, _ = books
+    brumaire = Book(
+        title="Brumaire", author="Marx", license="Public Domain",
+        text="The allotment farmers were ruined by the mortgage and the tax collector.",
+    )
+    SQLDocumentRepository(database).save(brumaire)
+    manifesto_on_peasants = Book(
+        title="Programme", author="Engels", license="Public Domain",
+        text="The peasantry is a class doomed by large-scale production.",
+    )
+    SQLDocumentRepository(database).save(manifesto_on_peasants)
+    llm = ScriptedLLM("peasants, allotment, small farmers", "comparability: comparable | both")
+
+    comparison = agent_for(database, llm).compare_sources(
+        selections(manifesto_on_peasants, brumaire), "the peasantry"
+    )
+
+    assert [p.title for p in comparison.profiles] == ["Programme", "Brumaire"]
+    assert "the peasantry" in llm.prompts[0].user  # the keywords prompt
 
 
 def test_named_paragraphs_need_no_subject(database, books):
@@ -182,9 +207,9 @@ def test_too_many_sources_are_refused(database, books):
 
 def test_without_two_sources_with_passages_the_model_is_not_asked(database, books):
     manifesto, _, cookbook = books
-    llm = ScriptedLLM()
+    llm = ScriptedLLM(KEYWORDS)
     comparison = agent_for(database, llm).compare_sources(selections(manifesto, cookbook), "the state")
-    assert llm.prompts == []
+    assert len(llm.prompts) == 1  # only the search keywords were asked for
     assert TOO_FEW_TO_COMPARE in comparison.warnings
     assert [p.title for p in comparison.profiles] == ["Manifesto"]
 
@@ -199,7 +224,7 @@ def test_without_a_model_the_passages_are_still_returned(database, books):
 
 def test_model_failure_keeps_the_passages(database, books):
     manifesto, lenin, _ = books
-    llm = ScriptedLLM(LLMError("timeout"))
+    llm = ScriptedLLM(KEYWORDS, LLMError("timeout"))
     comparison = agent_for(database, llm).compare_sources(selections(manifesto, lenin), "the state")
     assert comparison.passages
     assert any("could not be generated: timeout" in w for w in comparison.warnings)
@@ -207,7 +232,7 @@ def test_model_failure_keeps_the_passages(database, books):
 
 def test_unreadable_reply_keeps_the_passages(database, books):
     manifesto, lenin, _ = books
-    llm = ScriptedLLM("Both texts discuss the state at length.")
+    llm = ScriptedLLM(KEYWORDS, "Both texts discuss the state at length.")
     comparison = agent_for(database, llm).compare_sources(selections(manifesto, lenin), "the state")
     assert comparison.points == ()
     assert COMPARISON_UNREADABLE in comparison.warnings
@@ -220,6 +245,6 @@ def test_news_outlet_reaches_the_prompt(database, books):
         text="The state budget passed after the ruling class parties agreed.", license="",
     )
     SQLDocumentRepository(database).save(article)
-    llm = ScriptedLLM("comparability: partly comparable | different scale")
+    llm = ScriptedLLM(KEYWORDS, "comparability: partly comparable | different scale")
     agent_for(database, llm).compare_sources(selections(manifesto, article), "the state")
-    assert "Staff, “State budget passes” (news, published by Example Wire)" in llm.prompts[0].user
+    assert "Staff, “State budget passes” (news, published by Example Wire)" in llm.prompts[1].user
