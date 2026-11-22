@@ -50,6 +50,13 @@ Every command has `--help`.
 # Multi-step research (F03): plan, gather sources step by step, then analyse
 python -m praxis research "Why did the 1848 revolution in Germany fail?"
 python -m praxis research "What is imperialism?" --max-steps 3 --max-tool-calls 4
+python -m praxis research "Why did 1848 fail?" --save -t 1848   # keep it in the workspace
+
+# Research sessions (F03): every research run is stored and can be continued
+python -m praxis sessions list
+python -m praxis sessions show 27004bab                # id prefix from the list
+python -m praxis sessions continue 27004bab            # run the steps a limit left unrun
+python -m praxis sessions continue 27004bab --focus "the role of the peasantry"
 
 # Source-first questions (F04): passages first, then an AI explanation
 python -m praxis ask "What did Marx say about the state?"
@@ -88,6 +95,14 @@ reached. The model then writes findings, historical context, theoretical
 connections, contradictions and open questions, citing `[n]`. The command
 prints every step (assessments are marked ◆), the concrete situation the
 assessments established, and anything it could not do.
+
+Every research run is stored with its sources, findings and plan.
+`sessions continue` runs another round of a stored session: the reader's
+`--focus` is planned and searched first, then any steps a limit left
+unrun, then the usual assessment. Earlier sources keep their numbers,
+earlier searches are not repeated, each round has its own budget and may
+add up to 10 sources, and the analysis is rewritten over all of them.
+Research cut short by a limit is listed as incomplete.
 
 `ask` searches the library's paragraphs, shows the ones that address the
 question, and only then asks the model to explain them, citing `[n]`. If
