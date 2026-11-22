@@ -10,7 +10,7 @@ from datetime import date
 from pathlib import Path
 from uuid import UUID
 
-from praxis.documents import Document
+from praxis.documents import Document, NewsArticle
 from praxis.library.providers import DocumentProvider, ProviderError, SourceReference
 from praxis.persistence import DocumentRepository
 
@@ -37,12 +37,16 @@ class LibraryService:
 
     # --- finding texts -----------------------------------------------------
 
+    # News articles (F01) are stored with the texts so that questions,
+    # research and comparisons can draw on them, but they are not part of
+    # the reading library's listings. They are found through `news`.
+
     def search(self, query: str) -> list[Document]:
-        return self._documents.search(query)
+        return [d for d in self._documents.search(query) if not _is_news(d)]
 
     def browse(self, topic: str | None = None) -> list[Document]:
         """All texts, or only those tagged with ``topic`` (any letter case)."""
-        documents = self._documents.list_all()
+        documents = [d for d in self._documents.list_all() if not _is_news(d)]
         if topic is None:
             return documents
         wanted = topic.strip().lower()
@@ -50,9 +54,7 @@ class LibraryService:
 
     def topics(self) -> list[tuple[str, int]]:
         """Each topic with how many texts carry it, most common first."""
-        counts = Counter(
-            t.lower() for d in self._documents.list_all() for t in d.topics
-        )
+        counts = Counter(t.lower() for d in self.browse() for t in d.topics)
         return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
 
     def get_document(self, document_id: UUID | str) -> Document:
@@ -124,7 +126,8 @@ class LibraryService:
         return ImportReport(tuple(imported), tuple(failures))
 
     def is_empty(self) -> bool:
-        return self._documents.count() == 0
+        """True when there are no reading texts, even if news is stored."""
+        return self._documents.count() == self._documents.count(NewsArticle.kind)
 
 
 def read_catalogue(path: Path | str) -> list[SourceReference]:
@@ -144,6 +147,10 @@ def read_catalogue(path: Path | str) -> list[SourceReference]:
         )
         for entry in entries
     ]
+
+
+def _is_news(document: Document) -> bool:
+    return document.kind == NewsArticle.kind
 
 
 def _slug(title: str) -> str:

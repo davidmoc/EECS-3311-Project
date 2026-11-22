@@ -76,7 +76,8 @@ class DocumentRepository(ABC):
         read, so resolving a short id does not load any document text."""
 
     @abstractmethod
-    def count(self) -> int: ...
+    def count(self, kind: str | None = None) -> int:
+        """How many documents are stored, or how many of one kind."""
 
     @abstractmethod
     def list_all(self) -> list[Document]:
@@ -85,6 +86,11 @@ class DocumentRepository(ABC):
     @abstractmethod
     def save(self, document: Document) -> None:
         """Insert the document, or replace the stored copy with the same id."""
+
+    @abstractmethod
+    def list_kind(self, kind: str, since: date | None = None) -> list[Document]:
+        """Documents of one kind (``"news"``), newest first; with ``since``,
+        only those published on or after that date."""
 
 
 class SQLDocumentRepository(DocumentRepository):
@@ -160,12 +166,28 @@ class SQLDocumentRepository(DocumentRepository):
         ).fetchall()
         return [UUID(row["id"]) for row in rows]
 
-    def count(self) -> int:
-        return self._connection.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+    def count(self, kind: str | None = None) -> int:
+        if kind is None:
+            return self._connection.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+        return self._connection.execute(
+            "SELECT COUNT(*) FROM documents WHERE kind = ?", (kind,)
+        ).fetchone()[0]
 
     def list_all(self) -> list[Document]:
         rows = self._connection.execute(
             "SELECT * FROM documents ORDER BY title COLLATE NOCASE"
+        ).fetchall()
+        return [_to_document(row) for row in rows]
+
+    def list_kind(self, kind: str, since: date | None = None) -> list[Document]:
+        where, parameters = "kind = ?", [kind]
+        if since is not None:
+            where += " AND publication_date >= ?"
+            parameters.append(since.isoformat())
+        rows = self._connection.execute(
+            f"SELECT * FROM documents WHERE {where} "
+            "ORDER BY publication_date DESC, title COLLATE NOCASE",
+            parameters,
         ).fetchall()
         return [_to_document(row) for row in rows]
 
