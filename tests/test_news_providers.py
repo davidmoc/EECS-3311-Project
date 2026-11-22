@@ -127,3 +127,9 @@ def test_bundled_feed_list_is_readable():
 def test_unreadable_feed_list_is_an_error(tmp_path):
     with pytest.raises(NewsProviderError):
         read_feeds(tmp_path / "missing.json")
+
+
+def test_continue_reading_links_are_dropped():
+    """Live run: Guardian summaries ended with a "Continue reading..." paragraph."""
+    data = RSS2.replace(b"Ports along the coast closed.&lt;/p&gt;", b"Ports along the coast closed.&lt;/p&gt;&lt;p&gt;Continue reading...&lt;/p&gt;")
+    assert parse_feed(data, FEED)[0].text.endswith("Ports along the coast closed.")

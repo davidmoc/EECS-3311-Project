@@ -37,6 +37,8 @@ USER_AGENT = "Praxis/0.1 (course project; RSS reader)"
 _TAG = re.compile(r"<[^>]+>")
 # Paragraph breaks in feed HTML, kept so the summary keeps its paragraphs.
 _BREAK = re.compile(r"</p\s*>|<br\s*/?>", re.IGNORECASE)
+# Links back to the full article that some feeds append ("Continue reading...").
+_BOILERPLATE = re.compile(r"^(continue reading|read more)\W*$", re.IGNORECASE)
 
 
 class NewsProviderError(Exception):
@@ -165,7 +167,7 @@ def _plain(text: str) -> str:
 def _summary(markup: str) -> str:
     """Feed HTML as plain paragraphs separated by blank lines."""
     paragraphs = [_plain(part) for part in _BREAK.split(markup)]
-    text = "\n\n".join(p for p in paragraphs if p)
+    text = "\n\n".join(p for p in paragraphs if p and not _BOILERPLATE.match(p))
     if len(text) > MAX_SUMMARY_CHARS:
         text = text[:MAX_SUMMARY_CHARS].rsplit(" ", 1)[0] + " …"
     return text
