@@ -2,16 +2,18 @@
 
 from datetime import date
 
+import pytest
 from conftest import ScriptedLLM
 
-from praxis.agent import PoliticalResearchAgent
+from praxis.agent import AgentError, PoliticalResearchAgent
 from praxis.agent.agent import EVENT_QUESTION
 from praxis.documents import NewsArticle
-from praxis.news.events import Event, Grouping
-from praxis.persistence import SQLDocumentRepository, SQLReaderProfileRepository
+from praxis.news.events import Event, Grouping, SummaryStatus
+from praxis.persistence import SQLDocumentRepository, SQLReaderProfileRepository, SQLWorkspaceRepository
 from praxis.persistence.research import SQLResearchRepository
 from praxis.reader_model.service import ReaderProfileService
 from praxis.tools import ToolFactory, ToolManager
+from praxis.workspace.service import WorkspaceService
 
 
 def report(title, outlet, text):
@@ -62,3 +64,29 @@ def test_event_research_is_stored_like_any_research(library_database):
     agent = agent_for(library_database, llm)
     result = agent.research_event(EVENT)
     assert agent.get_research(result.session.id).purposes[1] == "event"
+
+
+# --- comparing an event's reports, saving an event ---------------------------------
+
+
+def test_an_events_reports_are_compared_one_per_outlet(library_database):
+    llm = ScriptedLLM("comparability: comparable | same strike")
+    comparison = agent_for(library_database, llm).compare_event_reports(EVENT)
+    assert comparison.subject == "Dockworkers strike closes ports"
+    assert [p.outlet for p in comparison.profiles] == ["a", "b"]
+    assert len(llm.prompts) == 1  # whole reports are compared: no keyword search
+
+
+def test_an_event_from_one_outlet_cannot_be_compared(library_database):
+    single = Event(EVENT.reports[:1], Grouping.SINGLE_REPORT)
+    with pytest.raises(AgentError, match="Only one outlet"):
+        agent_for(library_database, None).compare_event_reports(single)
+
+
+def test_an_event_is_saved_with_its_reports(library_database):
+    workspace = WorkspaceService(SQLWorkspaceRepository(library_database))
+    item = workspace.save_event(EVENT.with_summary(summary="Ports closed [1].", summary_status=SummaryStatus.SUMMARIZED))
+    assert item.title == "Event: Dockworkers strike closes ports"
+    assert "Summary (AI-generated from the reports):\nPorts closed [1]." in item.content
+    assert "[2] b, 2026-11-22: Port strike spreads" in item.content
+    assert workspace.event_of(item) == EVENT.id

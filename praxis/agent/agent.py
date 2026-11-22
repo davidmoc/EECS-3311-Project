@@ -456,6 +456,20 @@ class PoliticalResearchAgent:
         ]
         return self.compare_sources(selections, research.objective)
 
+    def compare_event_reports(self, event: Event) -> SourceComparison:
+        """Compare how the outlets reporting ``event`` cover it (F10 from an
+        event view): one report per outlet, up to four, whole."""
+        first_by_outlet: dict[str, NewsArticle] = {}
+        for report in event.reports:
+            first_by_outlet.setdefault(report.outlet, report)
+        if len(first_by_outlet) < 2:
+            raise AgentError("Only one outlet reported this event, so there is nothing to compare.")
+        selections = [
+            SourceSelection.of(report, tuple(range(1, len(report.passages()) + 1)) or (1,))
+            for report in list(first_by_outlet.values())[:MAX_COMPARED_SOURCES]
+        ]
+        return self.compare_sources(selections, event.headline)
+
     def get_comparison(self, comparison_id: UUID) -> SourceComparison:
         comparison = self._require_comparisons().get(comparison_id)
         if comparison is None:

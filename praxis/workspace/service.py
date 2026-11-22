@@ -12,6 +12,7 @@ from uuid import UUID
 
 from praxis.agent import AgentResponse
 from praxis.comparison import SourceComparison
+from praxis.news.events import Event
 from praxis.research.result import ResearchResult
 from praxis.documents import Document, Passage
 from praxis.persistence import WorkspaceRepository
@@ -20,6 +21,7 @@ from praxis.workspace.models import SavedItem, SavedItemKind, Workspace
 Clock = Callable[[], datetime]
 RESEARCH_REFERENCE = "research:"
 COMPARISON_REFERENCE = "comparison:"
+EVENT_REFERENCE = "event:"
 
 
 class WorkspaceError(ValueError):
@@ -125,6 +127,21 @@ class WorkspaceService:
             )
         )
 
+    def save_event(self, event: Event, note: str = "", tags: tuple[str, ...] = ()) -> SavedItem:
+        """Save a news event with a snapshot of its card and reports, so it
+        can be returned to after it leaves the dashboard."""
+        return self.save_item(
+            SavedItem(
+                kind=SavedItemKind.EVENT,
+                title=f"Event: {event.headline}",
+                reference=f"{EVENT_REFERENCE}{event.id}",
+                content=render_event(event),
+                note=note,
+                tags=tags,
+                saved_at=self._clock(),
+            )
+        )
+
     def add_note(self, title: str, text: str = "", tags: tuple[str, ...] = ()) -> SavedItem:
         return self.save_item(
             SavedItem(SavedItemKind.NOTE, title, content=text, tags=tags, saved_at=self._clock())
@@ -180,6 +197,16 @@ class WorkspaceService:
             return None
         try:
             return UUID(item.reference[len(COMPARISON_REFERENCE):])
+        except ValueError:
+            return None
+
+    @staticmethod
+    def event_of(item: SavedItem) -> UUID | None:
+        """The stored news event a saved event came from, if any."""
+        if item.kind is not SavedItemKind.EVENT or not item.reference.startswith(EVENT_REFERENCE):
+            return None
+        try:
+            return UUID(item.reference[len(EVENT_REFERENCE):])
         except ValueError:
             return None
 
@@ -262,4 +289,20 @@ def render_comparison(comparison: SourceComparison) -> str:
             )
         )
     parts.extend(f"Note: {warning}" for warning in comparison.warnings)
+    return "\n\n".join(parts)
+
+
+def render_event(event: Event) -> str:
+    """Plain-text snapshot of an event: its summary (marked as AI), then
+    each report's outlet, date, headline, link and feed summary."""
+    parts = []
+    if event.is_summarized:
+        parts.append(f"Summary (AI-generated from the reports):\n{event.summary}")
+    if event.note:
+        parts.append(f"Note: {event.note}")
+    parts.append("Reports:\n" + "\n\n".join(
+        f"[{n}] {r.outlet}, {r.publication_date.isoformat() if r.publication_date else 'undated'}: "
+        f"{r.title}\n{r.source_url}\n{r.text}".rstrip()
+        for n, r in enumerate(event.reports, start=1)
+    ))
     return "\n\n".join(parts)
