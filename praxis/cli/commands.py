@@ -21,10 +21,11 @@ import typer
 
 from praxis.agent import AgentError, AgentResponse, ResponseStatus, Source
 from praxis.app import Application, build_application, bundled_library_service
-from praxis.documents import Document
+from praxis.documents import Annotation, AnnotationType, Document
 from praxis.library import LibraryError, SourceReference
 from praxis.reader_model import ExplanationDepth, KnowledgeLevel, ReaderProfile
 from praxis.reader_model.events import DocumentRead
+from praxis.reading import AnnotationError, AnnotationResult
 from praxis.research import ResearchBudget, ResearchError
 from praxis.research.result import ResearchResult
 from praxis.research.situation import ConcreteSituation
@@ -35,16 +36,18 @@ library_app = typer.Typer(help="Browse, search and read the text library (F05)."
 profile_app = typer.Typer(help="Inspect and correct your reader model (F13).", no_args_is_help=True)
 workspace_app = typer.Typer(help="Save and return to texts, passages and notes (F15).", no_args_is_help=True)
 sessions_app = typer.Typer(help="Reopen and continue earlier research (F03).", no_args_is_help=True)
+annotations_app = typer.Typer(help="List and remove the AI annotations on a text (F06).", no_args_is_help=True)
 app.add_typer(library_app, name="library")
 app.add_typer(profile_app, name="profile")
 app.add_typer(workspace_app, name="workspace")
 app.add_typer(sessions_app, name="sessions")
+app.add_typer(annotations_app, name="annotations")
 
 # Tests replace this to run commands against an in-memory database.
 application_factory = build_application
 
 # Errors whose message is meant for the user, not a stack trace.
-USER_ERRORS = (AgentError, LibraryError, ResearchError, ValueError)
+USER_ERRORS = (AgentError, AnnotationError, LibraryError, ResearchError, ValueError)
 
 # Longest stretch of a passage printed by `ask`; the rest is one command away.
 SHOWN_PASSAGE_CHARS = 600
@@ -392,6 +395,7 @@ def library_read(
     start: Annotated[int, typer.Option(help="First paragraph to show (1-based).", min=1)] = 1,
     count: Annotated[int, typer.Option(help="How many paragraphs to show.", min=1)] = 10,
     find: Annotated[Optional[str], typer.Option(help="Show only paragraphs containing these words.")] = None,
+    annotations: Annotated[bool, typer.Option("--annotations", "-a", help="Show the AI annotations under their paragraphs.")] = False,
 ) -> None:
     """Read a text paragraph by paragraph. Progress is recorded in your profile."""
     with session() as application:
@@ -401,6 +405,9 @@ def library_read(
         if shown and not find:
             # Reading in order counts as progress; keyword lookups do not.
             application.events.publish(DocumentRead(document, start - 1 + len(shown)))
+        by_passage: dict = {}
+        for annotation in application.annotations.annotations_for(document):
+            by_passage.setdefault(annotation.passage_id, []).append(annotation)
 
     typer.secho(f"{document.title} — {document.author}", bold=True)
     typer.echo(f"Source: {document.source_url or 'unknown'} | Licence: {document.license or 'unknown'}\n")
@@ -411,9 +418,106 @@ def library_read(
         text = passage.text if document.can_reproduce() else document.cite(passage).quoted_text
         typer.echo(f"[{passage.locator}]")
         typer.echo(textwrap.fill(text, width=88) + "\n")
+        notes = by_passage.get(passage.id, [])
+        if notes and annotations:
+            for annotation in notes:
+                _print_annotation(annotation)
+        elif notes:
+            kinds = ", ".join(dict.fromkeys(a.type.label for a in notes))
+            plural = "s" if len(notes) > 1 else ""
+            typer.secho(f"  ✎ {len(notes)} AI annotation{plural} ({kinds}) — show with --annotations\n", fg=typer.colors.MAGENTA)
     remaining = len(passages) - (start - 1 + len(shown))
     if remaining > 0:
         typer.echo(f"… {remaining} more paragraphs. Next: --start {start + len(shown)}")
+
+
+# --- annotations (F06) ----------------------------------------------------------
+
+ANNOTATION_TYPES = ", ".join(t.value.replace("_", "-") for t in AnnotationType)
+
+
+@app.command("annotate")
+def annotate(
+    document_id: Annotated[str, typer.Argument(help="Id or id prefix of the text.")],
+    paragraph: Annotated[int, typer.Argument(help="Paragraph number, as in [¶12] from `library read`.", min=1)],
+    kind: Annotated[str, typer.Option("--type", "-t", help=f"Kind of annotation: {ANNOTATION_TYPES}.")] = "argument",
+) -> None:
+    """Ask for an AI annotation of one paragraph; it is kept with the text."""
+    with session() as application:  # inside, so a bad --type is reported, not raised
+        annotation_type = AnnotationType.parse(kind)
+        document = application.library.get_document(document_id)
+        passage = document.paragraph(paragraph)
+        result = application.annotations.generate_annotation(
+            document, passage, annotation_type, application.profiles.get_profile()
+        )
+
+    typer.secho(f"{document.title} — {document.author}, {passage.locator}", bold=True)
+    text = passage.text if document.can_reproduce() else document.cite(passage).quoted_text
+    typer.echo(textwrap.fill(text, width=88) + "\n")
+    _print_annotation_result(result)
+
+
+def _print_annotation_result(result: AnnotationResult) -> None:
+    if result.annotation is not None:
+        _print_annotation(result.annotation)
+    else:
+        typer.secho("No annotation was written:", fg=typer.colors.YELLOW)
+        for limitation in result.limitations:
+            typer.secho(f"  - {limitation}", fg=typer.colors.YELLOW)
+    _print_warnings(result.warnings, result.tokens_used)
+
+
+def _print_annotation(annotation: Annotation) -> None:
+    """An annotation, indented behind a bar so it never reads as the text."""
+    label = f"AI annotation: {annotation.type.label}"
+    if annotation.personalized:
+        label += ", adapted to your reader profile"
+    typer.secho(f"  ┃ {label}  [{str(annotation.id)[:8]}]", fg=typer.colors.MAGENTA, bold=True)
+    for block in annotation.content.split("\n\n"):
+        for line in textwrap.wrap(block, width=82) or [""]:
+            typer.secho(f"  ┃ {line}", fg=typer.colors.MAGENTA)
+        typer.secho("  ┃", fg=typer.colors.MAGENTA)
+    if annotation.uncertainties:
+        typer.secho("  ┃ Could not be verified:", fg=typer.colors.YELLOW)
+        for note in annotation.uncertainties:
+            for number, line in enumerate(textwrap.wrap(note, width=78)):
+                typer.secho(f"  ┃ {'- ' if number == 0 else '  '}{line}", fg=typer.colors.YELLOW)
+    for number, citation in enumerate(annotation.sources, start=1):
+        paragraph = citation.locator.lstrip("¶")
+        typer.secho(f"  ┃ [{number}] {citation.format()}", fg=typer.colors.CYAN)
+        typer.secho(
+            f"  ┃     → praxis library read {str(citation.document_id)[:8]} --start {paragraph}",
+            fg=typer.colors.CYAN,
+        )
+    typer.echo()
+
+
+@annotations_app.command("list")
+def annotations_list(
+    document_id: Annotated[str, typer.Argument(help="Id or id prefix of the text.")],
+) -> None:
+    """Every AI annotation on a text, in text order."""
+    with session() as application:
+        document = application.library.get_document(document_id)
+        notes = application.annotations.annotations_for(document)
+    typer.secho(f"{document.title} — {document.author}", bold=True)
+    if not notes:
+        typer.echo("No annotations yet. Add one with: praxis annotate <id> <paragraph>")
+        return
+    for annotation in notes:
+        typer.echo(f"\n[{annotation.locator}]")
+        _print_annotation(annotation)
+
+
+@annotations_app.command("remove")
+def annotations_remove(
+    annotation_id: Annotated[str, typer.Argument(help="Annotation id or prefix, shown in brackets.")],
+) -> None:
+    """Delete an annotation you do not want to keep."""
+    with session() as application:
+        found = application.annotations.find_annotation(annotation_id)
+        application.annotations.remove_annotation(found)
+    typer.echo(f"Removed annotation {str(found)[:8]}.")
 
 
 @library_app.command("download")

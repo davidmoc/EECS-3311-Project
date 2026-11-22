@@ -20,6 +20,7 @@ from praxis.library import (
 from praxis.llm import LLMClient, OpenAILLMAdapter
 from praxis.persistence import (
     Database,
+    SQLAnnotationRepository,
     SQLDocumentRepository,
     SQLReaderProfileRepository,
     SQLWorkspaceRepository,
@@ -28,6 +29,7 @@ from praxis.persistence.research import SQLResearchRepository
 from praxis.reader_model.events import LearningEventBus
 from praxis.reader_model.service import ReaderProfileService
 from praxis.reader_model.updater import ReaderModelUpdater
+from praxis.reading import AnnotationService
 from praxis.tools import ToolFactory, ToolManager
 from praxis.workspace.service import WorkspaceService
 
@@ -41,6 +43,7 @@ class Application:
     events: LearningEventBus
     workspace: WorkspaceService
     agent: PoliticalResearchAgent
+    annotations: AnnotationService
     # False when the caller passed in a database it will close itself.
     owns_database: bool = True
     _closed: bool = field(default=False, repr=False)
@@ -81,6 +84,9 @@ def build_application(
         workspace=WorkspaceService(SQLWorkspaceRepository(database)),
         agent=PoliticalResearchAgent(
             tools, profiles, llm, research_repository=SQLResearchRepository(database)
+        ),
+        annotations=AnnotationService(
+            tools, llm, repository=SQLAnnotationRepository(database)
         ),
         owns_database=owns_database,
     )
