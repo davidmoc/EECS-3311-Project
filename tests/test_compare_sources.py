@@ -320,3 +320,20 @@ def test_research_on_one_text_cannot_be_compared(library_database):
     assert {s.citation.document_title for s in research.sources} == {"The Communist Manifesto"}
     with pytest.raises(AgentError, match="only one text"):
         stored_agent(library_database).compare_research_sources(research.session.id)
+
+
+def test_paragraphs_beyond_the_limit_are_reported(database):
+    """Live run: research with 16 passages from one book was cut to 6 silently."""
+    documents = SQLDocumentRepository(database)
+    long = Book(title="Long", author="A", license="Public Domain",
+                text="\n\n".join(f"The state, part {n}." for n in range(1, 10)))
+    short = Book(title="Short", author="B", license="Public Domain", text="The state.")
+    documents.save(long)
+    documents.save(short)
+
+    comparison = agent_for(database).compare_sources(
+        [SourceSelection.of(long, tuple(range(1, 10))), SourceSelection.of(short, (1,))]
+    )
+
+    assert len(comparison.passages_of(comparison.profiles[0])) == 6
+    assert "9 paragraphs of “Long” were named; only the first 6 (¶1, ¶2, ¶3, ¶4, ¶5, ¶6) were compared." in comparison.warnings

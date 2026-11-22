@@ -19,6 +19,10 @@ MAX_NAMED_PARAGRAPHS = 6
 PURPOSE = "comparison"
 
 NOTHING_ON_SUBJECT = "No passage of “{title}” matched {searched}, so it was left out of the comparison."
+TOO_MANY_PARAGRAPHS = (
+    "{count} paragraphs of “{title}” were named; only the first "
+    f"{MAX_NAMED_PARAGRAPHS} ({{kept}}) were compared."
+)
 RETRIEVAL_FAILED = "A source could not be retrieved ({error}), so it was left out of the comparison."
 
 
@@ -73,8 +77,14 @@ class CompareSourcesCommand(ResearchCommand):
         for selection in self.selections:
             tool_input: dict = {"document_id": str(selection.document_id)}
             if selection.paragraphs:
-                tool_input["paragraphs"] = list(selection.paragraphs[:MAX_NAMED_PARAGRAPHS])
+                named = list(dict.fromkeys(selection.paragraphs))
+                tool_input["paragraphs"] = named[:MAX_NAMED_PARAGRAPHS]
                 tool_input["limit"] = MAX_NAMED_PARAGRAPHS
+                if len(named) > MAX_NAMED_PARAGRAPHS:
+                    context.session.add_warning(TOO_MANY_PARAGRAPHS.format(
+                        title=selection.label, count=len(named),
+                        kept=", ".join(f"¶{n}" for n in named[:MAX_NAMED_PARAGRAPHS]),
+                    ))
             else:
                 tool_input["query"] = self.search_query
                 tool_input["limit"] = PASSAGES_PER_SOURCE
