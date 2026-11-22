@@ -143,3 +143,9 @@ def test_brackets_emptied_by_removing_citations_are_removed():
     point = parsed.points[0]
     assert point.description == "A stresses elections; B stresses parties"
     assert point.evidence == (1, 7, 8)
+
+
+def test_no_space_is_left_before_punctuation():
+    """Live run: "note active searches , details not mentioned"."""
+    parsed = parse_comparison("difference: emphasis | B notes searches [2], A does not [1] [1, 2]")
+    assert parsed.points[0].description == "B notes searches, A does not"

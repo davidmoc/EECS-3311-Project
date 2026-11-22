@@ -26,6 +26,7 @@ _LINE = re.compile(r"^\s*(?:[-*•]|\d+[.)])?\s*\**\s*([a-z]+)\s*\**\s*:\s*(.+?)
 # "[1] vs [3]": joined into "[1, 3]" so no stray "vs" is left in the text.
 _JOINED_MARKS = re.compile(r"\]\s*(?:vs\.?|versus|and|&|/|,)\s*\[", re.IGNORECASE)
 
+_SPACE_BEFORE_MARK = re.compile(r"\s+([,.;:])")
 _EMPTY_BRACKETS = re.compile(r"\s*\(\s*[,;]?\s*\)")
 
 # Points that say something about more than one source.
@@ -117,5 +118,7 @@ def _aspect(word: str) -> str | None:
 
 
 def _clean(text: str) -> str:
-    """Quotation marks are kept: a description may end with a quoted word."""
-    return " ".join(text.split()).strip(" .;,*")
+    """Quotation marks are kept: a description may end with a quoted word.
+    Removing "[2]" from "searches [2], details" leaves "searches , details",
+    so space before punctuation goes too."""
+    return _SPACE_BEFORE_MARK.sub(r"\1", " ".join(text.split())).strip(" .;,*")
