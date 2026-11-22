@@ -114,3 +114,16 @@ def test_budget_outranks_the_assessment(setup):
     reason = policy().stop_reason(session, BUDGET, plan, context, ResearchAssessment())
 
     assert reason is StopReason.TOOL_CALLS
+
+
+def test_a_resumed_session_gets_a_fresh_budget(setup):
+    session, context, plan = setup
+    for _ in range(3):
+        session.increment_iteration()
+    session.complete(at=START + timedelta(seconds=90))
+    assert policy(90).stop_reason(session, BUDGET, plan, context) is StopReason.ITERATIONS
+
+    session.resume(at=START + timedelta(seconds=100))
+
+    assert policy(130).stop_reason(session, BUDGET, plan, context) is None
+    assert policy(160).stop_reason(session, BUDGET, plan, context) is StopReason.DURATION

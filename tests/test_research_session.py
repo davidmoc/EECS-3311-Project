@@ -82,3 +82,39 @@ def test_budget_limits_must_be_positive():
         ResearchBudget(max_tool_calls=0)
     with pytest.raises(ResearchError):
         ResearchBudget(max_duration_seconds=-1)
+
+
+def test_resume_starts_a_new_round_keeping_earlier_work():
+    session = ResearchSession("wages", started_at=START)
+    session.increment_iteration()
+    session.increment_tool_calls()
+    session.increment_llm_calls(tokens=40)
+    session.record_step(StepRecord("Retrieve evidence: wages", True, (1,)))
+    session.add_warning("Research stopped early.")
+    session.complete(at=START + timedelta(seconds=30))
+    later = START + timedelta(days=1)
+
+    session.resume(at=later)
+    session.increment_iteration()
+    session.record_step(StepRecord("Retrieve theory: value", True, (2,)))
+
+    assert session.status is ResearchStatus.RUNNING and session.finished_at is None
+    assert session.rounds == 2
+    assert [step.round for step in session.steps] == [1, 2]
+    assert (session.iteration_count, session.round_iteration_count) == (2, 1)
+    assert (session.tool_call_count, session.round_tool_call_count) == (1, 0)
+    assert (session.llm_call_count, session.round_llm_call_count) == (1, 0)
+    assert session.tokens_used == 40
+    assert session.warnings == []
+    assert session.round_elapsed_seconds(later + timedelta(seconds=5)) == 5
+    assert session.elapsed_seconds(later) == 86400
+
+
+def test_a_failed_session_can_be_resumed_but_a_running_one_cannot():
+    failed = ResearchSession("wages")
+    failed.fail("no sources")
+    failed.resume()
+
+    assert failed.is_running and failed.failure_reason is None
+    with pytest.raises(ResearchError):
+        failed.resume()

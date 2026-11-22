@@ -140,7 +140,7 @@ class PoliticalResearchAgent:
         return (
             self._method.available
             and not context.corpus.is_empty
-            and session.llm_call_count + 1 < budget.max_llm_calls
+            and session.round_llm_call_count + 1 < budget.max_llm_calls
         )
 
     def _assess_and_revise(
@@ -205,7 +205,7 @@ class PoliticalResearchAgent:
 
         if self._llm is None:
             return partial(NO_LLM_WARNING)
-        if session.llm_call_count >= budget.max_llm_calls:
+        if session.round_llm_call_count >= budget.max_llm_calls:
             return partial(NO_SYNTHESIS_BUDGET)
 
         prompt = self._prompts.build_research_prompt(

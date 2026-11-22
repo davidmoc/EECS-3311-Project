@@ -10,7 +10,7 @@ readable ``repr``) from the annotated fields, much like a Go struct literal.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
 from uuid import UUID, uuid4
@@ -55,6 +55,7 @@ class StepRecord:
     error: str | None = None
     retry_of: int | None = None  # index of the step this one retried
     is_assessment: bool = False  # an assessment of the situation, not a search
+    round: int = 1  # which round of the session ran it (see ResearchSession.resume)
 
 
 @dataclass
@@ -72,11 +73,19 @@ class ResearchSession:
     # Things the reader should know about how the run went.
     warnings: list[str] = field(default_factory=list)
     failure_reason: str | None = None
+    # A session can be continued later (``resume``). Each continuation is a
+    # new round with its own budget; the counters above stay cumulative and
+    # ``round_base`` holds their values when the current round began.
+    rounds: int = 1
+    round_started_at: datetime | None = None
+    round_base: tuple[int, int, int] = (0, 0, 0)  # iterations, tool calls, model calls
 
     def __post_init__(self) -> None:
         self.objective = " ".join(self.objective.split())
         if not self.objective:
             raise ResearchError("A research objective is required.")
+        if self.round_started_at is None:
+            self.round_started_at = self.started_at
 
     def increment_iteration(self) -> None:
         self._require_running()
@@ -96,9 +105,9 @@ class ResearchSession:
             self.warnings.append(warning)
 
     def record_step(self, step: StepRecord) -> int:
-        """Append ``step`` and return its index."""
+        """Append ``step``, marked with the current round, and return its index."""
         self._require_running()
-        self.steps.append(step)
+        self.steps.append(replace(step, round=self.rounds))
         return len(self.steps) - 1
 
     def complete(self, at: datetime | None = None) -> None:
@@ -112,12 +121,45 @@ class ResearchSession:
         self.failure_reason = reason
         self.finished_at = at or utc_now()
 
+    def resume(self, at: datetime | None = None) -> None:
+        """Start another round of a finished session.
+
+        The steps, counters and sources of earlier rounds are kept; the
+        budget applies to the new round only. Warnings are cleared: they
+        described the previous result, which the new round replaces.
+        """
+        if self.is_running:
+            raise ResearchError("The research session is still running.")
+        at = at or utc_now()
+        self.status = ResearchStatus.RUNNING
+        self.finished_at = None
+        self.failure_reason = None
+        self.warnings.clear()
+        self.rounds += 1
+        self.round_started_at = at
+        self.round_base = (self.iteration_count, self.tool_call_count, self.llm_call_count)
+
     @property
     def is_running(self) -> bool:
         return self.status is ResearchStatus.RUNNING
 
+    @property
+    def round_iteration_count(self) -> int:
+        return self.iteration_count - self.round_base[0]
+
+    @property
+    def round_tool_call_count(self) -> int:
+        return self.tool_call_count - self.round_base[1]
+
+    @property
+    def round_llm_call_count(self) -> int:
+        return self.llm_call_count - self.round_base[2]
+
     def elapsed_seconds(self, now: datetime) -> float:
         return ((self.finished_at or now) - self.started_at).total_seconds()
+
+    def round_elapsed_seconds(self, now: datetime) -> float:
+        return ((self.finished_at or now) - self.round_started_at).total_seconds()
 
     def _require_running(self) -> None:
         if not self.is_running:

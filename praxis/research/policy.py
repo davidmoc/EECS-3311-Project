@@ -90,16 +90,17 @@ class ResearchStoppingPolicy:
     def budget_exceeded(
         self, session: ResearchSession, budget: ResearchBudget
     ) -> StopReason | None:
-        """The limit that stops further retrieval steps, if any.
+        """The limit that stops further retrieval steps in the current
+        round, if any. Earlier rounds of a continued session do not count.
 
         Model calls are not checked here: retrieval steps do not use the
         model, so a spent model budget limits only the model's own work
         (the synthesis), never the gathering of sources.
         """
-        if session.iteration_count >= budget.max_iterations:
+        if session.round_iteration_count >= budget.max_iterations:
             return StopReason.ITERATIONS
-        if session.tool_call_count >= budget.max_tool_calls:
+        if session.round_tool_call_count >= budget.max_tool_calls:
             return StopReason.TOOL_CALLS
-        if session.elapsed_seconds(self._clock()) >= budget.max_duration_seconds:
+        if session.round_elapsed_seconds(self._clock()) >= budget.max_duration_seconds:
             return StopReason.DURATION
         return None
