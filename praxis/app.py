@@ -20,6 +20,8 @@ from praxis.library import (
 from praxis.llm import LLMClient, OpenAILLMAdapter
 from praxis.news import NewsProvider, RSSNewsAdapter, read_feeds
 from praxis.news.service import NewsService
+from praxis.news.summary import NewsSummaryService
+from praxis.persistence.events import SQLEventRepository
 from praxis.persistence import (
     Database,
     SQLAnnotationRepository,
@@ -100,6 +102,8 @@ def build_application(
             news_providers if news_providers is not None
             else [RSSNewsAdapter(feed) for feed in read_feeds()],
             documents,
+            summaries=NewsSummaryService(llm),
+            events=SQLEventRepository(database, documents),
         ),
         owns_database=owns_database,
     )

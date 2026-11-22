@@ -95,6 +95,16 @@ CREATE TABLE IF NOT EXISTS comparisons (
     created_at    TEXT NOT NULL,
     data          TEXT NOT NULL
 );
+
+-- News events (F01, F02): a group of news reports and its card. data
+-- (JSON) holds the report ids, which are rows of documents.
+CREATE TABLE IF NOT EXISTS news_events (
+    id           TEXT PRIMARY KEY,
+    headline     TEXT NOT NULL,
+    last_date    TEXT,
+    report_count INTEGER NOT NULL,
+    data         TEXT NOT NULL
+);
 """
 
 
