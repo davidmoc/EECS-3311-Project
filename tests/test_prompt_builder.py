@@ -1,6 +1,7 @@
 import pytest
 
 from praxis.agent import PromptBuilder, ResearchCorpus, reader_context
+from praxis.agent.prompts import CITATION_NUMBER_RULE
 from praxis.documents import Book
 from praxis.reader_model import (
     AssessmentSource,
@@ -102,3 +103,19 @@ def test_search_terms_prompt_and_parsing():
         f"t{i}" for i in range(8)
     ]
     assert builder.parse_search_terms(" , ") == []
+
+
+def test_every_prompt_showing_passages_says_paragraph_numbers_are_not_citations():
+    """A live run cited a passage's ¶310 as "[310]"."""
+    book = Book(title="Revolution", author="Engels", text="The bourgeoisie made peace with the monarchy in 1848.", license="Public Domain")
+    corpus = ResearchCorpus()
+    corpus.add_passage(book, book.passages()[0])
+    builder = PromptBuilder()
+
+    prompts = [
+        builder.build_question_prompt("Why?", corpus),
+        builder.build_research_prompt("Why?", corpus, {}),
+        builder.build_assessment_prompt("Why?", corpus, {}, established=[], searches_done=[]),
+    ]
+
+    assert all(CITATION_NUMBER_RULE in prompt.system for prompt in prompts)

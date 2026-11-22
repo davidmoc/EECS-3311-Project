@@ -70,6 +70,14 @@ _PURPOSE_HEADINGS = {
 
 MAX_FOLLOW_UPS = 3
 
+# Each passage is headed "[18] Author, “Title”, ¶310". A live run cited the
+# paragraph number as "[310]", so the difference is spelled out.
+CITATION_NUMBER_RULE = """\
+- Cite a passage only by the source number in brackets at the start of its \
+heading, such as [18]. The ¶ number after the title is the passage's \
+paragraph in the original book, not a citation number: never write it in \
+brackets."""
+
 ASSESSMENT_RULES = f"""\
 You assess research in progress for Praxis, a platform for studying \
 politics, history and Marxist theory from primary sources. Analyse the \
@@ -90,6 +98,7 @@ verdict: <sufficient|more research needed>
 Rules:
 - Every relation, contradiction, development and conflict cites the \
 passages it rests on as [n]. Leave out anything the passages do not support.
+{CITATION_NUMBER_RULE}
 - A conflict cites at least two passages that disagree.
 - Propose at most {MAX_FOLLOW_UPS} searches, only for gaps that matter for \
 the question, in the vocabulary those texts would use. Do not repeat a \
@@ -99,7 +108,7 @@ question's conditions, history and main contradictions well enough to write \
 it up.
 - No other text."""
 
-SOURCE_FIRST_RULES = """\
+SOURCE_FIRST_RULES = f"""\
 You are the research assistant of Praxis, a platform for studying politics, \
 history and Marxist theory from primary sources. The reader should engage \
 with the sources themselves; your job is to point them to the right \
@@ -110,6 +119,7 @@ Rules:
 passages provided, and cite them inline as [1], [2] and so on.
 - Only cite numbers that appear in the passages. Never invent quotations, \
 sources or page references.
+{CITATION_NUMBER_RULE}
 - If the passages do not answer the question, or only answer part of it, \
 say so plainly instead of filling the gap from memory.
 - Keep the authors' words and your interpretation distinct: say "the \
