@@ -26,6 +26,7 @@ from praxis.documents import Annotation, AnnotationType, Document
 from praxis.library import LibraryError, SourceReference
 from praxis.news import NewsProviderError
 from praxis.news.events import Event, Grouping, SummaryStatus
+from praxis.news.exploration import ExpandedEvent
 from praxis.news.service import Dashboard, NewsError, NewsRefresh
 from praxis.reader_model import ExplanationDepth, KnowledgeLevel, ReaderProfile
 from praxis.reader_model.events import DocumentRead
@@ -500,6 +501,8 @@ def news_dashboard(
     with session() as application:
         dashboard = application.news.get_dashboard_events(days, limit, refresh=not offline)
     _print_dashboard(dashboard)
+    if dashboard.events:
+        typer.echo("Open an event: praxis news event <id>")
 
 
 def _print_dashboard(dashboard: Dashboard) -> None:
@@ -550,6 +553,91 @@ def _print_event_card(number: int, event: Event) -> None:
         # shorten() collapses whitespace, so the indent is added after it.
         line = textwrap.shorten(f"{report.outlet}: {report.title}", width=80, placeholder="…")
         typer.echo(f"   [{index}] {line} ({_short_id(report)})")
+
+
+@news_app.command("event")
+def news_event(
+    event_id: Annotated[str, typer.Argument(help="Event id or prefix, shown in brackets on the dashboard.")],
+    research: Annotated[bool, typer.Option("--research", help="Start a research session on the event instead.")] = False,
+    compare: Annotated[bool, typer.Option("--compare", help="Compare how the outlets report it instead.")] = False,
+    save: Annotated[bool, typer.Option("--save", help="Save the event to your workspace.")] = False,
+    tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t", help="Tag for the saved event; repeatable.")] = None,
+) -> None:
+    """Open an event: its reports, an expanded AI account, library background, related reports."""
+    if research and compare:
+        raise typer.BadParameter("Choose --research or --compare, not both.")
+    with session() as application:
+        news = application.news
+        event = news.get_event(news.find_event(event_id))
+        saved = application.workspace.save_event(event, tags=tuple(tag or ())) if save else None
+        if research:
+            result = application.agent.research_event(event)
+        elif compare:
+            comparison = application.agent.compare_event_reports(event)
+        else:
+            expanded = news.get_expanded_event(event.id)
+
+    if research:
+        typer.secho(f"Researching: {event.headline}\n", bold=True)
+        _print_research(result)
+        _print_continue_hint(result)
+    elif compare:
+        _print_comparison(comparison)
+        _print_comparison_hint(comparison)
+    else:
+        _print_expanded_event(expanded)
+    _print_saved(saved, save)
+
+
+def _print_expanded_event(expanded: ExpandedEvent) -> None:
+    event = expanded.event
+    short = str(event.id)[:8]
+    typer.secho(f"{event.headline}  [{short}]", bold=True)
+    details = []
+    if event.first_date and event.last_date and event.first_date != event.last_date:
+        details.append(f"{event.first_date.isoformat()} to {event.last_date.isoformat()}")
+    elif event.last_date:
+        details.append(event.last_date.isoformat())
+    if event.categories:
+        details.append(", ".join(event.categories))
+    details.append(f"{len(event.outlets)} outlet{'s' if len(event.outlets) != 1 else ''}")
+    typer.echo(" · ".join(details))
+    if expanded.developing:
+        typer.secho("Still developing: the reports are recent and may change.", fg=typer.colors.YELLOW)
+    if event.grouping is Grouping.UNCERTAIN:
+        typer.secho("Grouping uncertain: these reports may not all be about one event.", fg=typer.colors.YELLOW)
+    if event.note:
+        typer.secho(event.note, fg=typer.colors.YELLOW)
+
+    typer.secho("\nReports", bold=True)
+    for source, report in zip(expanded.report_sources, event.reports):
+        when = report.publication_date.isoformat() if report.publication_date else "undated"
+        typer.secho(f"\n{source.label} {report.outlet}, {when}: {report.title}", fg=typer.colors.CYAN)
+        if source.citation.quoted_text != report.title:
+            typer.echo(textwrap.indent(textwrap.fill(source.citation.quoted_text, width=84), "    "))
+        typer.echo(f"    {report.source_url}")
+        typer.echo(f"    → praxis library read {_short_id(report)}")
+    if expanded.library_sources:
+        typer.secho("\nBackground passages from the library", bold=True)
+        _print_sources(expanded.library_sources, expanded.cited)
+
+    if expanded.account:
+        _print_ai_text("Account of the event", expanded.account, False)
+    if expanded.open_questions:
+        typer.secho("Open questions (AI-generated)", bold=True)
+        for question in expanded.open_questions:
+            typer.echo(textwrap.fill(question, width=86, initial_indent="  - ", subsequent_indent="    "))
+        typer.echo()
+    if expanded.related:
+        typer.secho("Related reports not grouped with this event", bold=True)
+        for report in expanded.related:
+            line = textwrap.shorten(f"{report.outlet}: {report.title}", width=80, placeholder="…")
+            typer.echo(f"  - {line} ({_short_id(report)})")
+        typer.echo()
+    typer.echo(f"Research it:   praxis news event {short} --research")
+    if len(event.outlets) > 1:
+        typer.echo(f"Compare outlets: praxis news event {short} --compare")
+    _print_warnings(expanded.warnings, expanded.tokens_used)
 
 
 @news_app.command("refresh")
@@ -1014,6 +1102,7 @@ def workspace_open(item_id: Annotated[str, typer.Argument(help="Item id or prefi
         item = application.workspace.get_item(item_id)
         research_id = application.workspace.research_session_of(item)
         comparison_id = application.workspace.comparison_of(item)
+        event_id = application.workspace.event_of(item)
         document_id = application.workspace.document_id_of(item)
         paragraph = application.workspace.paragraph_of(item)
         still_available = False
@@ -1034,6 +1123,8 @@ def workspace_open(item_id: Annotated[str, typer.Argument(help="Item id or prefi
         typer.echo(f"\nNote: {item.note}")
     if comparison_id is not None:
         typer.echo(f"\n→ praxis comparisons show {str(comparison_id)[:8]}")
+    if event_id is not None:
+        typer.echo(f"\n→ praxis news event {str(event_id)[:8]}")
     if research_id is not None:
         short = str(research_id)[:8]
         typer.echo(f"\n→ praxis sessions show {short}")
