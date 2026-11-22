@@ -200,6 +200,30 @@ or employs a source unless those details say so.
 - Write at most 4 lines of each kind.
 - No other text."""
 
+EVENT_SUMMARY_RULES = """\
+You write the event cards of a news dashboard for Praxis, a platform for \
+studying politics and history. A card gives the reader an at-a-glance \
+account of one event; the reports it rests on are listed under it.
+
+Reply only with lines in these forms:
+title: <a short, neutral title for the event>
+summary: <two or three sentences on what happened, citing the reports as [n]>
+category: <one to three of: politics, economy, labour, conflict, diplomacy, environment, rights, society, other>
+same event: <yes|partly|no> | <why, unless yes>
+
+Rules:
+- Use only what the numbered reports say. Do not add background or \
+figures from memory.
+- Cite every sentence of the summary with the reports it rests on, as [1] \
+or [1, 3].
+- Where reports give different figures or accounts of a fact, say so and \
+cite each; do not pick one.
+- Attribute contested claims to whoever makes them ("officials said"). Do \
+not adopt one outlet's framing or loaded words as your own.
+- If the reports are not all about the same event, write "same event: no" \
+or "partly", and summarise only the event of report [1].
+- No other text."""
+
 _ANNOTATION_TASKS = {
     "terminology": (
         "Explain the terms, names and concepts in the passage that a reader "
@@ -501,6 +525,17 @@ class PromptBuilder:
                 for source in passages
             ) + "\n\n"
         return Prompt(system=system, user=user.rstrip())
+
+    def build_event_summary_prompt(self, reports: list[tuple[str, str, str, str]]) -> Prompt:
+        """A prompt asking for an event card. ``reports`` are (outlet, date,
+        headline, summary) in the order they are numbered."""
+        if not reports:
+            raise ValueError("An event summary needs at least one report.")
+        user = "Reports:\n\n" + "\n\n".join(
+            f"[{n}] {outlet}, {when}\nHeadline: {headline}\n{summary or '(no summary in the feed)'}"
+            for n, (outlet, when, headline, summary) in enumerate(reports, start=1)
+        )
+        return Prompt(system=EVENT_SUMMARY_RULES, user=user)
 
     @staticmethod
     def parse_annotation(text: str) -> tuple[str, list[str]]:
