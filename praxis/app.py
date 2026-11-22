@@ -18,6 +18,8 @@ from praxis.library import (
     directory_fetcher,
 )
 from praxis.llm import LLMClient, OpenAILLMAdapter
+from praxis.news import NewsProvider, RSSNewsAdapter, read_feeds
+from praxis.news.service import NewsService
 from praxis.persistence import (
     Database,
     SQLAnnotationRepository,
@@ -45,6 +47,7 @@ class Application:
     workspace: WorkspaceService
     agent: PoliticalResearchAgent
     annotations: AnnotationService
+    news: NewsService
     # False when the caller passed in a database it will close itself.
     owns_database: bool = True
     _closed: bool = field(default=False, repr=False)
@@ -59,10 +62,12 @@ def build_application(
     settings: Settings | None = None,
     database: Database | None = None,
     llm: LLMClient | None = None,
+    news_providers: list[NewsProvider] | None = None,
 ) -> Application:
     """``llm`` replaces the configured model (tests pass a fake). Without
     one, the OpenAI adapter is used when an API key is configured; with no
-    key the agent still retrieves passages but cannot explain them."""
+    key the agent still retrieves passages but cannot explain them.
+    ``news_providers`` replaces the feeds in ``data/news/feeds.json``."""
     settings = settings or load_settings()
     owns_database = database is None
     database = database or Database(settings.database_path)
@@ -90,6 +95,11 @@ def build_application(
         ),
         annotations=AnnotationService(
             tools, llm, repository=SQLAnnotationRepository(database)
+        ),
+        news=NewsService(
+            news_providers if news_providers is not None
+            else [RSSNewsAdapter(feed) for feed in read_feeds()],
+            documents,
         ),
         owns_database=owns_database,
     )

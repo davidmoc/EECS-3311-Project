@@ -24,6 +24,8 @@ from praxis.app import Application, build_application, bundled_library_service
 from praxis.comparison import Comparability, SourceComparison, SourceSelection
 from praxis.documents import Annotation, AnnotationType, Document
 from praxis.library import LibraryError, SourceReference
+from praxis.news import NewsProviderError
+from praxis.news.service import NewsRefresh
 from praxis.reader_model import ExplanationDepth, KnowledgeLevel, ReaderProfile
 from praxis.reader_model.events import DocumentRead
 from praxis.reading import AnnotationError, AnnotationResult
@@ -38,6 +40,7 @@ profile_app = typer.Typer(help="Inspect and correct your reader model (F13).", n
 workspace_app = typer.Typer(help="Save and return to texts, passages and notes (F15).", no_args_is_help=True)
 sessions_app = typer.Typer(help="Reopen and continue earlier research (F03).", no_args_is_help=True)
 annotations_app = typer.Typer(help="List and remove the AI annotations on a text (F06).", no_args_is_help=True)
+news_app = typer.Typer(help="Current news from the configured feeds (F01).", no_args_is_help=True)
 comparisons_app = typer.Typer(help="Reopen earlier source comparisons (F10).", no_args_is_help=True)
 app.add_typer(library_app, name="library")
 app.add_typer(profile_app, name="profile")
@@ -45,12 +48,13 @@ app.add_typer(workspace_app, name="workspace")
 app.add_typer(sessions_app, name="sessions")
 app.add_typer(annotations_app, name="annotations")
 app.add_typer(comparisons_app, name="comparisons")
+app.add_typer(news_app, name="news")
 
 # Tests replace this to run commands against an in-memory database.
 application_factory = build_application
 
 # Errors whose message is meant for the user, not a stack trace.
-USER_ERRORS = (AgentError, AnnotationError, LibraryError, ResearchError, ValueError)
+USER_ERRORS = (AgentError, AnnotationError, LibraryError, NewsProviderError, ResearchError, ValueError)
 
 # Longest stretch of a passage printed by `ask`; the rest is one command away.
 SHOWN_PASSAGE_CHARS = 600
@@ -480,6 +484,60 @@ def _print_comparison(comparison: SourceComparison) -> None:
 def _document_of(comparison: SourceComparison, number: int):
     profile = comparison.source_of(number)
     return profile.document_id if profile else None
+
+
+# --- news (F01) ----------------------------------------------------------------
+
+
+@news_app.command("refresh")
+def news_refresh() -> None:
+    """Fetch the latest articles from every configured feed and keep them."""
+    with session() as application:
+        refresh = application.news.refresh()
+    _print_refresh(refresh)
+
+
+def _print_refresh(refresh: NewsRefresh) -> None:
+    by_outlet: dict[str, int] = {}
+    for article in refresh.fetched:
+        by_outlet[article.outlet] = by_outlet.get(article.outlet, 0) + 1
+    for outlet, count in by_outlet.items():
+        typer.echo(f"{outlet}: {count} articles")
+    for outlet, reason in refresh.failures:
+        typer.secho(f"{outlet}: unavailable — {reason}", fg=typer.colors.YELLOW)
+    typer.echo(f"{len(refresh.fetched)} articles fetched, {refresh.new_count} new.")
+    if refresh.all_failed:
+        typer.secho("No news source could be reached; earlier news is still shown by `news list`.", fg=typer.colors.YELLOW)
+    elif refresh.is_limited:
+        typer.secho("Some sources were unavailable, so the news is limited.", fg=typer.colors.YELLOW)
+
+
+@news_app.command("list")
+def news_list(
+    days: Annotated[int, typer.Option(min=1, max=60, help="How many days back, today included.")] = 3,
+    outlet: Annotated[Optional[str], typer.Option(help="Only this outlet (any part of its name).")] = None,
+) -> None:
+    """Stored headlines, newest first."""
+    with session() as application:
+        articles = application.news.get_recent_news(days)
+    if outlet:
+        articles = [a for a in articles if outlet.lower() in a.outlet.lower()]
+    if not articles:
+        typer.echo("No news stored for that period. Fetch it with: praxis news refresh")
+        return
+    for article in articles:
+        when = article.publication_date.isoformat() if article.publication_date else "undated"
+        typer.echo(f"{_short_id(article)}  {when}  {article.title}")
+        typer.echo(f"          {article.outlet}  {article.source_url}")
+
+
+@news_app.command("feeds")
+def news_feeds() -> None:
+    """The outlets news is fetched from (data/news/feeds.json)."""
+    with session() as application:
+        outlets = application.news.outlets
+    for outlet in outlets:
+        typer.echo(outlet)
 
 
 # --- library (F05) -----------------------------------------------------------
