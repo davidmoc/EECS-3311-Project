@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, timezone
 from enum import Enum
 from typing import ClassVar
 from uuid import UUID, uuid4, uuid5
@@ -28,6 +28,33 @@ class AnnotationType(Enum):
     FRAMING = "framing"
     FACT_CHECK = "fact_check"
     CONNECTION = "connection"
+
+    @property
+    def label(self) -> str:
+        """``"historical context"``: how the type is shown to the reader."""
+        return self.value.replace("_", " ")
+
+    @property
+    def searches_library(self) -> bool:
+        """Whether this kind of annotation draws on other library passages
+        (SD04's "additional context required"). Terminology, argument and
+        framing annotations work from the text and its surroundings alone."""
+        return self in (
+            AnnotationType.HISTORICAL_CONTEXT,
+            AnnotationType.FACT_CHECK,
+            AnnotationType.CONNECTION,
+        )
+
+    @classmethod
+    def parse(cls, name: str) -> AnnotationType:
+        """``"historical-context"``, ``"Historical context"`` or
+        ``"historical_context"``; raises ValueError for anything else."""
+        normalized = "_".join(name.strip().lower().replace("-", " ").split())
+        try:
+            return cls(normalized)
+        except ValueError:
+            choices = ", ".join(t.value.replace("_", "-") for t in cls)
+            raise ValueError(f"Unknown annotation type '{name}'. Choose one of: {choices}.") from None
 
 
 @dataclass(frozen=True)
@@ -57,12 +84,34 @@ class Annotation:
 
     Kept as its own object, never merged into the passage text, so the
     author's words and the agent's commentary stay distinguishable.
+
+    ``sources`` are the other library passages the annotation drew on; the
+    content cites them as [1], [2] in this order. ``uncertainties`` say
+    what the annotation could not verify (UC06: "the annotation indicates
+    uncertainty"); an empty tuple means the model reported nothing.
     """
 
     passage_id: UUID
     type: AnnotationType
     content: str
+    document_id: UUID | None = None
+    locator: str = ""
+    sources: tuple[Citation, ...] = ()
+    uncertainties: tuple[str, ...] = ()
+    personalized: bool = False
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     id: UUID = field(default_factory=uuid4)
+
+    def __post_init__(self) -> None:
+        if not self.content.strip():
+            raise ValueError("An annotation must have content.")
+        # Accept lists too, but store tuples so the annotation stays immutable.
+        object.__setattr__(self, "sources", tuple(self.sources))
+        object.__setattr__(self, "uncertainties", tuple(self.uncertainties))
+
+    @property
+    def is_uncertain(self) -> bool:
+        return bool(self.uncertainties)
 
 
 @dataclass
@@ -108,6 +157,15 @@ class Document:
                 (p for p in paragraphs if p), start=1
             )
         ]
+
+    def paragraph(self, number: int) -> Passage:
+        """Paragraph ``number`` (1-based, as in its ``¶`` locator)."""
+        passages = self.passages()
+        if not 1 <= number <= len(passages):
+            raise ValueError(
+                f"“{self.title}” has {len(passages)} paragraphs; there is no ¶{number}."
+            )
+        return passages[number - 1]
 
     def find_passages(self, query: str) -> list[Passage]:
         """Passages containing every term of ``query``, ignoring case."""
