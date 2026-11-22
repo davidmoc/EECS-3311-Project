@@ -233,3 +233,20 @@ platform.openai.com.
   - Comparing from a research view is `compare_research_sources(session_id)`: the research question is the subject, and the research's own passages are compared (up to four texts, those that supplied most passages, at most six passages each). It needs a research session that drew on two texts or more. Comparing from an event waits for F01/F02.
 - **Human contribution:** None on this slice yet; the code has not been reviewed.
 - **Outcome:** Six code commits and this documentation commit.
+
+### 2026-11-22 — News dashboard, first slice: fetching and keeping news (F01)
+
+- **Task:** The retrieval half of F01 (UC01 steps 1 and the "source unavailable" flows, SD03's `NewsService` → `NewsProvider.getRecentNews()`): fetch current news from several configured sources, keep it, and list it.
+- **Input/Instruction:** Third of the five slices requested.
+- **AI contribution:** Checked which public RSS feeds were reachable, and chose six for a spread of outlets: BBC News, Al Jazeera, The Guardian, Deutsche Welle, CBC News and Peoples Dispatch (`data/news/feeds.json`). Added the `praxis/news` package: `NewsProvider`, `RSSNewsAdapter` (RSS 2.0, RSS 1.0/RDF and Atom, parsed with the standard library), `parse_feed`, `read_feeds`, and `NewsService` with `refresh()` and `get_recent_news(days)`. `DocumentRepository` gained `list_kind` and `count(kind)`. `LibraryService` now leaves news out of `browse`, `search`, `topics` and `is_empty`. Commands: `praxis news refresh|list|feeds`. 507 automated tests, none of which touch the network. Live run on the scratch database: `news refresh` fetched 145 articles from all six feeds in under 2 s (33, 25, 45, 10, 20 and 12), and `news list --days 1` showed 74 from 22 November.
+- **Problems met:**
+  - Making `is_empty` ignore news first loaded every document, which an existing test forbids. It now compares two counts.
+  - Feeds give a date and time, but `Document.publication_date` is a date, so headlines from the same day are listed alphabetically, not by time. Not changed.
+  - Al Jazeera's items carry the category "Show Types", which is kept as a topic. Not changed.
+- **Design changes from Stage 1 introduced here:**
+  - `NewsProvider.getRecentNews()` is `get_recent_news()` on each provider, and `RSSNewsAdapter` adapts one feed. Each feed is a provider, so one unavailable feed is reported and the rest are still used (UC01).
+  - SD03 fetches news inside `getDashboardEvents()`. Here fetching is `NewsService.refresh()`, and the stored articles are what is shown. The dashboard can therefore fall back to earlier news when no source is reachable (SD03's "cached/partial events").
+  - Articles are stored as `NewsArticle` documents in the document table, keyed by their link. Questions, research and comparisons can therefore draw on news through the same passage search, which UC03's News Provider actor needs. Only the feed's syndicated summary (at most 1,500 characters) is kept, and the licence marks it as not reproducible, so quotations stay within the excerpt limit.
+  - `NewsController`/`NewsView` are played by the `news` commands. No clustering, summaries or event cards yet; those are the next slice.
+- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Outcome:** Three code commits and this documentation commit.

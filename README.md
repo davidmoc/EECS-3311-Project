@@ -77,6 +77,12 @@ python -m praxis library read abdc2552 --start 259 --count 1 --annotations
 python -m praxis annotations list abdc2552
 python -m praxis annotations remove 1a3c3cde        # id shown in brackets
 
+# News (F01): headlines and summaries from the feeds in data/news/feeds.json
+python -m praxis news refresh                 # fetch and keep (needs network)
+python -m praxis news list --days 2
+python -m praxis news list --outlet guardian
+python -m praxis library read 5ce83d9c        # an article's feed summary
+
 # Source and framing comparison (F10): two to four texts, on one subject
 python -m praxis compare b67c02e1 abdc2552 --on "the peasantry"
 python -m praxis compare 59983f05:20-22 abdc2552:61,66   # named paragraphs
@@ -152,6 +158,14 @@ four, those that supplied most passages), on the research question, using
 the passages the research retrieved; at most six passages are taken from
 one text, and the reader is told which.
 
+`news refresh` reads six RSS and Atom feeds (BBC News, Al Jazeera, The
+Guardian, Deutsche Welle, CBC News, Peoples Dispatch). Only what a feed
+publishes for syndication is kept: headline, summary, link, date, author
+and categories. An unreachable feed is reported and the others are still
+read, and stored news stays available offline. News is kept out of
+`library browse` and `library search`, but `ask`, `research` and
+`compare` can draw on it.
+
 Reading with `library read` updates your reading progress, interests and
 inferred knowledge automatically; `profile know` always overrides inference.
 
@@ -175,6 +189,7 @@ API key and no network access.
 | `praxis/config.py` | Local settings and API-key handling |
 | `praxis/documents/` | Documents, passages, citations, annotations |
 | `praxis/library/` | `LibraryService`, `DocumentProvider`, Gutenberg adapter |
+| `praxis/news/` | `NewsProvider`, `RSSNewsAdapter`, `NewsService` (F01) |
 | `praxis/llm/` | `LLMClient` interface and the OpenAI adapter |
 | `praxis/persistence/` | SQLite database and repositories |
 | `praxis/research/` | Research session, commands, plan, planner, concrete situation, assessment method, stopping policy |
@@ -183,5 +198,6 @@ API key and no network access.
 | `praxis/tools/` | Agent tools, tool manager and tool factory |
 | `praxis/workspace/` | Saved items, workspace and its service |
 | `data/library/` | Bundled public-domain texts and their catalogue |
+| `data/news/feeds.json` | The news feeds `news refresh` reads |
 | `tests/` | Automated tests |
 | `docs/collaboration-log.md` | AI–human collaboration record |
