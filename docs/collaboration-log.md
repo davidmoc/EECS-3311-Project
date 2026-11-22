@@ -173,5 +173,5 @@ platform.openai.com.
   - Each round has its own budget, and may add up to 10 sources beyond those already gathered. The analysis is rewritten over all sources, with the reader's focuses added to the research question. Warnings are cleared when a round starts, because they describe the result that round replaces.
   - "Incomplete" (`ResearchResult.is_incomplete`) means no analysis was written, or a limit stopped the research while planned steps remained.
   - Listing, showing and continuing sessions go through the agent facade; `ResearchController` is still played by the CLI commands.
-- **Human contribution:** Asked for the next slice; chose to search the focus first. Review not yet recorded.
+- **Human contribution:** Asked for the next slice; chose to search the focus first. Reviewed the code.
 - **Outcome:** Six code commits and this documentation commit.
