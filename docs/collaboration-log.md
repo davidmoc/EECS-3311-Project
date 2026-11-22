@@ -196,5 +196,5 @@ platform.openai.com.
   - Annotations are stored by passage id. Passage ids derive from the document id and paragraph number, so an annotation finds its paragraph again. Sources are stored with their quoted text, as `SavedItem` and research results are. A failure to store becomes a warning. Annotations can be removed, which Stage 1 does not have.
   - `ReadingController` is played by the CLI commands, and `ReaderView` by `library read` (markers by default, full annotations with `--annotations`). SD04 shows reading progress being recorded on opening; that already happens in `library read` (F13), and `annotate` does not record progress.
   - Not built yet: UC06 step 9's links to recommended material (only links to the cited passages), saving an annotation to the workspace, and the GUI.
-- **Human contribution:** Asked for the next slice. Code not yet reviewed.
+- **Human contribution:** Asked for the next slice. Reviewed the code.
 - **Outcome:** Seven code commits and this documentation commit.
