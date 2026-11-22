@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 from praxis.agent.corpus import ResearchCorpus
+from praxis.documents import AnnotationType, Document, Passage
 from praxis.llm import Prompt
 from praxis.reader_model import ExplanationDepth, ReaderProfile
 
@@ -125,6 +126,68 @@ say so plainly instead of filling the gap from memory.
 - Keep the authors' words and your interpretation distinct: say "the \
 passage states" for the text and "this suggests" or similar for analysis.
 - Where an interpretation is disputed, say that it is disputed."""
+
+UNCERTAIN_PREFIX = "uncertain:"
+
+ANNOTATION_RULES = f"""\
+You annotate texts for readers of Praxis, a platform for studying politics, \
+history and Marxist theory from primary sources. The reader is reading the \
+text itself; your annotation sits beside one passage of it and helps them \
+read that passage. It is shown apart from the author's words and marked as \
+AI-generated.
+
+Rules:
+- Annotate the passage marked "Passage to annotate". The surrounding \
+paragraphs are there so you understand it; do not annotate them.
+- Keep the author's words and your commentary distinct: say "the passage \
+states" for the text and "this suggests" or similar for interpretation. \
+Quote the passage only briefly.
+- Other library passages, if given, are numbered; cite them inline as [1], \
+[2] when you draw on them. Only cite numbers that appear there. Never \
+invent quotations, sources or page references.
+{CITATION_NUMBER_RULE}
+- You may add background the passages do not contain, but say that it is \
+general background, not something the library texts state.
+- Where an interpretation is disputed, say that it is disputed.
+- After the annotation, for each thing you could not verify from the text \
+or the numbered passages and that the reader should check, add one line:
+{UNCERTAIN_PREFIX} <what could not be verified>
+Write no such line if there is nothing to flag.
+- Write plain paragraphs, no headings."""
+
+_ANNOTATION_TASKS = {
+    "terminology": (
+        "Explain the terms, names and concepts in the passage that a reader "
+        "may not know, as the author uses them."
+    ),
+    "historical_context": (
+        "Give the historical context the passage assumes: the events, "
+        "conditions, people and institutions it refers to, and when and "
+        "why it was written."
+    ),
+    "argument": (
+        "Explain the argument the passage makes: its claim, how it supports "
+        "the claim, and how the passage fits the argument of the surrounding "
+        "text."
+    ),
+    "framing": (
+        "Identify the ideological framing of the passage: the standpoint it "
+        "takes, the assumptions it makes, and what its choice of words or "
+        "emphasis does."
+    ),
+    "fact_check": (
+        "Check the factual claims the passage makes (dates, events, figures, "
+        "attributions). For each, say whether the numbered passages support "
+        "it, whether it is consistent with general historical knowledge, or "
+        "whether it cannot be checked. Distinguish factual claims from the "
+        "author's interpretation, which is not fact-checked."
+    ),
+    "connection": (
+        "Connect the passage to other texts and ideas: where the same idea "
+        "appears, is developed or is disputed elsewhere, especially in the "
+        "numbered library passages."
+    ),
+}
 
 _DEPTH_GUIDANCE = {
     ExplanationDepth.BRIEF: "Keep the explanation short: two or three sentences.",
@@ -326,6 +389,64 @@ class PromptBuilder:
             system=system,
             user=f"Question: {question}\n\nPassages:\n\n{passages}",
         )
+
+
+    def build_annotation_prompt(
+        self,
+        document: Document,
+        passage: Passage,
+        surrounding: list[Passage],
+        annotation_type: AnnotationType,
+        corpus: ResearchCorpus | None = None,
+        profile: ReaderProfile | None = None,
+    ) -> Prompt:
+        """A prompt asking the model to annotate ``passage`` of ``document``.
+
+        ``surrounding`` holds the nearby paragraphs, in order, and may
+        include ``passage`` itself (it is then marked in place). ``corpus``
+        holds other library passages to draw on, numbered for citation.
+        """
+        depth = profile.explanation_depth if profile else ExplanationDepth.STANDARD
+        system = (
+            f"{ANNOTATION_RULES}\n\nTask: {_ANNOTATION_TASKS[annotation_type.value]}\n\n"
+            f"{_DEPTH_GUIDANCE[depth]}"
+        )
+        context = reader_context(profile)
+        if context:
+            system += f"\n\nAbout the reader:\n{context}"
+
+        year = f" ({document.publication_date.year})" if document.publication_date else ""
+        user = f"Text: “{document.title}”{year}, by {document.author}\n\n"
+        nearby = surrounding if passage in surrounding else [passage]
+        for paragraph in nearby:
+            if paragraph == passage:
+                user += f"Passage to annotate ({paragraph.locator}):\n<<<\n{paragraph.text}\n>>>\n\n"
+            else:
+                user += f"({paragraph.locator}) {paragraph.text}\n\n"
+        if corpus is not None and not corpus.is_empty:
+            user += "Other library passages:\n\n" + "\n\n".join(
+                f"{source.label} {source.citation.format()}\n{source.citation.quoted_text}"
+                for source in corpus.sources
+            )
+        else:
+            user += "No other library passages were found for this annotation."
+        return Prompt(system=system, user=user.rstrip())
+
+    @staticmethod
+    def parse_annotation(text: str) -> tuple[str, list[str]]:
+        """The annotation without its ``uncertain:`` lines, and what those
+        lines say could not be verified, in order and without repeats."""
+        body: list[str] = []
+        uncertain: dict[str, None] = {}
+        for line in text.splitlines():
+            stripped = line.strip().lstrip("-*• ").strip()
+            if stripped.lower().startswith(UNCERTAIN_PREFIX):
+                note = stripped[len(UNCERTAIN_PREFIX):].strip()
+                if note:
+                    uncertain.setdefault(note, None)
+            else:
+                body.append(line)
+        return "\n".join(body).strip(), list(uncertain)
 
 
 def _grouped_passages(corpus: ResearchCorpus, purposes: dict[int, str]) -> str:
