@@ -149,7 +149,7 @@ def test_factory_creates_tools_that_work_through_the_manager(repository):
     for tool in factory.create_all():
         manager.register_tool(tool)
 
-    assert manager.tool_names() == ["library_search", "passage_search"]
+    assert manager.tool_names() == ["library_search", "passage_search", "source_retrieval"]
     assert isinstance(factory.create_tool(ToolType.LIBRARY_SEARCH), LibrarySearchTool)
     assert isinstance(factory.create_tool(ToolType.PASSAGE_SEARCH), PassageSearchTool)
 

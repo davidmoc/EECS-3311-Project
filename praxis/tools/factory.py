@@ -13,11 +13,13 @@ from praxis.persistence import DocumentRepository
 from praxis.tools.base import Tool
 from praxis.tools.library_search import LibrarySearchTool
 from praxis.tools.passage_search import PassageSearchTool
+from praxis.tools.source_retrieval import SourceRetrievalTool
 
 
 class ToolType(Enum):
     LIBRARY_SEARCH = "library_search"
     PASSAGE_SEARCH = "passage_search"
+    SOURCE_RETRIEVAL = "source_retrieval"
 
 
 class ToolFactory:
@@ -25,6 +27,7 @@ class ToolFactory:
         self._creators: dict[ToolType, Callable[[], Tool]] = {
             ToolType.LIBRARY_SEARCH: lambda: LibrarySearchTool(documents),
             ToolType.PASSAGE_SEARCH: lambda: PassageSearchTool(documents),
+            ToolType.SOURCE_RETRIEVAL: lambda: SourceRetrievalTool(documents),
         }
 
     def create_tool(self, tool_type: ToolType) -> Tool:

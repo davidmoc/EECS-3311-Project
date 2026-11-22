@@ -63,9 +63,12 @@ class DocumentRepository(ABC):
         """Documents matching every term of ``query``; title matches first."""
 
     @abstractmethod
-    def search_passages(self, query: str, limit: int = 5) -> list[PassageMatch]:
+    def search_passages(
+        self, query: str, limit: int = 5, document_id: UUID | None = None
+    ) -> list[PassageMatch]:
         """Passages relevant to any significant word of ``query``, most
-        relevant first. Common words like "what" or "the" are ignored."""
+        relevant first. Common words like "what" or "the" are ignored.
+        With ``document_id``, only that document's passages are searched."""
 
     @abstractmethod
     def find_ids_by_prefix(self, prefix: str) -> list[UUID]:
@@ -117,16 +120,22 @@ class SQLDocumentRepository(DocumentRepository):
         ).fetchall()
         return [_to_document(row) for row in rows]
 
-    def search_passages(self, query: str, limit: int = 5) -> list[PassageMatch]:
+    def search_passages(
+        self, query: str, limit: int = 5, document_id: UUID | None = None
+    ) -> list[PassageMatch]:
         match = _fts_query(query)
         if match is None or limit < 1:
             return []
+        within, parameters = "", [match]
+        if document_id is not None:
+            within = " AND document_id = ?"
+            parameters.append(str(document_id))
         # bm25() is lower for better matches, so ascending order is best first.
         rows = self._connection.execute(
             "SELECT text, passage_id, document_id, locator, "
             "bm25(passage_index) AS rank FROM passage_index "
-            "WHERE passage_index MATCH ? ORDER BY rank LIMIT ?",
-            (match, limit),
+            f"WHERE passage_index MATCH ?{within} ORDER BY rank LIMIT ?",
+            (*parameters, limit),
         ).fetchall()
         documents = self._find_metadata({row["document_id"] for row in rows})
         return [
