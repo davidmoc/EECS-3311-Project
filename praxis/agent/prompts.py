@@ -69,6 +69,7 @@ _PURPOSE_HEADINGS = {
     "history": "Retrieved for historical development",
     "relation": "Retrieved to investigate a material relation",
     "contradiction": "Retrieved to investigate a contradiction",
+    "event": "News reports of the event being researched",
 }
 
 MAX_FOLLOW_UPS = 3

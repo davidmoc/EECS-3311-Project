@@ -90,7 +90,7 @@ class EventExplorer:
         tokens = 0
         corpus = ResearchCorpus()
         for report in event.reports:
-            corpus.add_passage(report, _report_passage(report))
+            corpus.add_passage(report, report_passage(report))
         report_count = len(corpus)
 
         query = " ".join(r.title for r in event.reports)
@@ -177,7 +177,7 @@ class EventExplorer:
         return expanded
 
 
-def _report_passage(report: NewsArticle) -> Passage:
+def report_passage(report: NewsArticle) -> Passage:
     """The report's summary as one citable passage; its headline if the
     feed gave no summary."""
     passages = report.passages()

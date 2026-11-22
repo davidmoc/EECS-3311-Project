@@ -22,7 +22,9 @@ from praxis.comparison import (
     parse_comparison,
 )
 from praxis.comparison.command import CompareSourcesCommand
-from praxis.documents import Document
+from praxis.documents import Document, NewsArticle
+from praxis.news.events import Event
+from praxis.news.exploration import report_passage
 from praxis.llm import LLMClient, LLMError
 from praxis.reader_model.service import ReaderProfileService
 from praxis.research.assessment import ResearchAssessment
@@ -75,6 +77,11 @@ NO_SYNTHESIS_BUDGET = (
     "The model-call limit was used up before the findings could be written "
     "up, so only the sources are shown."
 )
+
+# Research on a news event starts from at most this many of its reports.
+MAX_EVENT_REPORTS = 6
+EVENT_PURPOSE = "event"
+EVENT_QUESTION = "{headline}: what happened, why, and which classes and interests are involved?"
 
 MAX_COMPARED_SOURCES = 4
 # What a comparison is "on" when the reader named paragraphs but no subject.
@@ -129,8 +136,17 @@ class PoliticalResearchAgent:
 
     # --- F03: multi-step research --------------------------------------------
 
-    def research(self, objective: str, budget: ResearchBudget | None = None) -> ResearchResult:
+    def research(
+        self,
+        objective: str,
+        budget: ResearchBudget | None = None,
+        reports: tuple[NewsArticle, ...] = (),
+    ) -> ResearchResult:
         """Plan, retrieve step by step within ``budget``, then synthesise.
+
+        ``reports`` are news reports the research starts from: they become
+        the first sources, before anything is searched (SD03's
+        ``research(event)``).
 
         Never fabricates: with no sources, no analysis is written; if the
         model is missing or fails, the gathered sources are still returned.
@@ -141,8 +157,23 @@ class PoliticalResearchAgent:
         profile = self._profiles.get_profile()
         plan = self._planner.create_initial_plan(session, profile)
         context = ResearchContext(session, self._tools, profile=profile)
+        if reports:
+            numbers = []
+            for report in reports[:MAX_EVENT_REPORTS]:
+                source = context.corpus.add_passage(report, report_passage(report))
+                context.purposes[source.number] = EVENT_PURPOSE
+                numbers.append(source.number)
+            session.record_step(StepRecord(
+                f"Start from the event's {len(numbers)} news report{'s' if len(numbers) != 1 else ''}",
+                True, tuple(numbers),
+            ))
         situation = self._builder.build_initial_situation(session.objective)
         return self._run(session, plan, context, situation, budget or ResearchBudget())
+
+    def research_event(self, event: Event, budget: ResearchBudget | None = None) -> ResearchResult:
+        """SD03's ``researchEvent``: a research session on a news event,
+        starting from its reports."""
+        return self.research(EVENT_QUESTION.format(headline=event.headline), budget, event.reports)
 
     def continue_research(
         self, session_id: UUID, focus: str | None = None, budget: ResearchBudget | None = None
