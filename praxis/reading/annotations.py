@@ -9,6 +9,7 @@ says it could not verify is kept on the annotation as its uncertainties.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from dataclasses import dataclass
 from uuid import UUID
@@ -43,6 +44,12 @@ UNKNOWN_CITATION_WARNING = (
     "The annotation refers to {labels}, which {verb} not among its sources; "
     "treat those statements as unsupported."
 )
+UNSEEN_PARAGRAPH_WARNING = (
+    "The annotation refers to {labels}, which the model was not shown; "
+    "read {pronoun} before relying on what the annotation says about {pronoun}."
+)
+# "¶12" or "¶ 12" in model output.
+PARAGRAPH_MARK = re.compile(r"¶\s*(\d+)")
 NOT_STORED_WARNING = "The annotation could not be stored, so it will not be shown again: {}"
 NO_CONTEXT_WARNING = (
     "No other library passage bears on this passage, so the annotation "
@@ -163,6 +170,14 @@ class AnnotationService:
                 verb="is" if len(unknown) == 1 else "are",
             ))
 
+        shown = {p.locator for p in surrounding} | {s.citation.locator for s in sources}
+        unseen = [n for n in paragraph_references(content) if f"¶{n}" not in shown]
+        if unseen:
+            warnings.append(UNSEEN_PARAGRAPH_WARNING.format(
+                labels=", ".join(f"¶{n}" for n in unseen),
+                pronoun="it" if len(unseen) == 1 else "them",
+            ))
+
         annotation = Annotation(
             passage_id=passage.id,
             type=annotation_type,
@@ -213,6 +228,11 @@ class AnnotationService:
         if corpus.is_empty:
             warnings.append(NO_CONTEXT_WARNING)
         return corpus
+
+
+def paragraph_references(text: str) -> list[int]:
+    """Paragraph numbers written as ``¶n`` in ``text``, each once, in order."""
+    return list(dict.fromkeys(int(n) for n in PARAGRAPH_MARK.findall(text)))
 
 
 def surrounding_passages(document: Document, passage: Passage) -> list[Passage]:

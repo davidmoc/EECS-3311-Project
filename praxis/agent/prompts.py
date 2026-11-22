@@ -143,8 +143,11 @@ paragraphs are there so you understand it; do not annotate them.
 states" for the text and "this suggests" or similar for interpretation. \
 Quote the passage only briefly.
 - Other library passages, if given, are numbered; cite them inline as [1], \
-[2] when you draw on them. Only cite numbers that appear there. Never \
-invent quotations, sources or page references.
+[2] when you draw on them, never by their ¶ number. Only cite numbers that \
+appear there. Never invent quotations, sources or page references.
+- You may refer to the passage and the surrounding paragraphs by their ¶ \
+number. Never refer to any other paragraph of the text: you have not seen \
+it.
 {CITATION_NUMBER_RULE}
 - You may add background the passages do not contain, but say that it is \
 general background, not something the library texts state.
