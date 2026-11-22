@@ -26,6 +26,8 @@ _LINE = re.compile(r"^\s*(?:[-*•]|\d+[.)])?\s*\**\s*([a-z]+)\s*\**\s*:\s*(.+?)
 # "[1] vs [3]": joined into "[1, 3]" so no stray "vs" is left in the text.
 _JOINED_MARKS = re.compile(r"\]\s*(?:vs\.?|versus|and|&|/|,)\s*\[", re.IGNORECASE)
 
+_EMPTY_BRACKETS = re.compile(r"\s*\(\s*[,;]?\s*\)")
+
 # Points that say something about more than one source.
 CROSS_SOURCE_KINDS = (PointKind.SIMILARITY, PointKind.DIFFERENCE, PointKind.DISAGREEMENT)
 
@@ -51,7 +53,10 @@ def parse_comparison(text: str) -> ParsedComparison | None:
             continue
         kind, rest = match.group(1).lower(), _JOINED_MARKS.sub(", ", match.group(2))
         evidence = tuple(cited_numbers(rest))
-        fields = [_clean(part) for part in CITATION_MARK.sub("", rest).split("|")]
+        # "the Manifesto stresses trade ([10])" would keep "()" once the
+        # marks are gone, so emptied brackets go with them.
+        unmarked = _EMPTY_BRACKETS.sub("", CITATION_MARK.sub("", rest))
+        fields = [_clean(part) for part in unmarked.split("|")]
         fields = [f for f in fields if f]
         if not fields:
             continue

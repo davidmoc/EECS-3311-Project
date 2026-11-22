@@ -133,3 +133,13 @@ def test_check_points_keeps_only_supported_points():
     kept, dropped = check_points(points, source_of)
     assert [(p.description, p.evidence) for p in kept] == [("both", (1, 3)), ("about A", (2,))]
     assert dropped == 3
+
+
+def test_brackets_emptied_by_removing_citations_are_removed():
+    """Live run: "... National Guard ([1]); Revolution ... ([7])" left "()"."""
+    parsed = parse_comparison(
+        "difference: emphasis | A stresses elections ([1]); B stresses parties ([7], [8]) [1, 7]"
+    )
+    point = parsed.points[0]
+    assert point.description == "A stresses elections; B stresses parties"
+    assert point.evidence == (1, 7, 8)
