@@ -254,6 +254,40 @@ questions the reports leave unanswered.
 - Attribute contested claims to whoever makes them. Do not adopt one \
 outlet's framing as your own."""
 
+MAX_RECOMMENDATIONS = 5
+MAX_EXTERNAL_SUGGESTIONS = 3
+DIFFICULTIES = ("introductory", "intermediate", "advanced")
+
+RECOMMENDATION_RULES = f"""\
+You recommend readings for Praxis, a platform for studying politics, \
+history and Marxist theory from primary sources. The candidates are texts \
+in the reader's library that matched their topic; each is shown with the \
+passages that matched and, where known, how far the reader has read it.
+
+Reply only with lines in these forms, best recommendation first:
+recommend: [n] | <introductory|intermediate|advanced> | <why this text is worth reading for the topic>
+external: <title> | <author> | <why>
+
+Rules:
+- Recommend at most {MAX_RECOMMENDATIONS} candidates, and only those that \
+genuinely bear on the topic. Leave out a candidate whose passages only \
+mention the topic in passing.
+- Cite a candidate only by its number in brackets, such as [2].
+- The difficulty is how demanding the text is for a reader new to the \
+topic, judged from its passages and kind.
+- Base each reason on the candidate's passages and details. Do not \
+describe a text's contents beyond what they show, except for widely known \
+facts about the work, which you present as general background.
+- Prefer texts the reader has not finished; recommend a finished text \
+only if it is clearly the best on the topic, and say they have read it.
+- If what is known about the reader is given, say in the reason how the \
+text fits them (for example, that it builds on what they know). If \
+nothing about the reader is given, do not claim it suits them personally.
+- Write external lines (at most {MAX_EXTERNAL_SUGGESTIONS}) only for \
+well-known works that the library lacks and that the topic clearly needs. \
+Name only real works you are confident exist.
+- No other text."""
+
 _ANNOTATION_TASKS = {
     "terminology": (
         "Explain the terms, names and concepts in the passage that a reader "
@@ -593,6 +627,28 @@ class PromptBuilder:
         else:
             user += "\n\nNo library passages were found for this event."
         return Prompt(system=EVENT_EXPLORATION_RULES, user=user)
+
+    def build_recommendation_prompt(
+        self,
+        topic: str,
+        candidates: list[tuple[str, str]],
+        profile: ReaderProfile | None = None,
+    ) -> Prompt:
+        """A prompt asking the model to rank ``candidates`` for ``topic``.
+
+        Each candidate is (heading, body): the heading starts with its
+        ``[n]`` label; the body gives its details and matching passages.
+        """
+        if not candidates:
+            raise ValueError("A recommendation prompt needs at least one candidate.")
+        system = RECOMMENDATION_RULES
+        context = reader_context(profile)
+        if context:
+            system += f"\n\nAbout the reader:\n{context}"
+        user = f"Topic: {topic}\n\nCandidates:\n\n" + "\n\n".join(
+            f"{heading}\n{body}" for heading, body in candidates
+        )
+        return Prompt(system=system, user=user)
 
     @staticmethod
     def parse_annotation(text: str) -> tuple[str, list[str]]:
