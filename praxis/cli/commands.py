@@ -474,8 +474,14 @@ def _print_annotation(annotation: Annotation) -> None:
         label += ", adapted to your reader profile"
     typer.secho(f"  ┃ {label}  [{str(annotation.id)[:8]}]", fg=typer.colors.MAGENTA, bold=True)
     for block in annotation.content.split("\n\n"):
-        for line in textwrap.wrap(block, width=82) or [""]:
-            typer.secho(f"  ┃ {line}", fg=typer.colors.MAGENTA)
+        # Each line is wrapped on its own, so a "- " list keeps its items.
+        for source_line in block.splitlines():
+            bullet = source_line.lstrip()[:2] in {"- ", "* ", "• "}
+            wrapped = textwrap.wrap(
+                source_line.strip(), width=82, subsequent_indent="  " if bullet else ""
+            )
+            for line in wrapped:
+                typer.secho(f"  ┃ {line}", fg=typer.colors.MAGENTA)
         typer.secho("  ┃", fg=typer.colors.MAGENTA)
     if annotation.uncertainties:
         typer.secho("  ┃ Could not be verified:", fg=typer.colors.YELLOW)

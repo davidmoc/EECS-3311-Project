@@ -102,3 +102,14 @@ def test_unknown_type_and_paragraph_fail_cleanly(manifesto_id, run):
 
 def test_list_without_annotations_explains_how_to_add_one(manifesto_id, run):
     assert "praxis annotate" in run("annotations", "list", manifesto_id).output
+
+
+def test_list_items_in_an_annotation_stay_on_their_own_lines(manifesto_id, run, monkeypatch, cli_database):
+    use_llm(
+        monkeypatch, cli_database,
+        "How the passages bear on the claims:\n- The date is supported.\n- The wording is not.",
+    )
+    output = run("annotate", manifesto_id, "3", "-t", "fact-check").output
+    assert "┃ How the passages bear on the claims:\n" in output
+    assert "┃ - The date is supported.\n" in output
+    assert "┃ - The wording is not.\n" in output
