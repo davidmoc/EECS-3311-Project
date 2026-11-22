@@ -73,6 +73,12 @@ def test_unknown_relation_types_and_malformed_lines_are_ignored():
     assert assessment.is_empty
 
 
+def test_a_bare_verdict_is_an_assessment_but_prose_is_not():
+    bare = parse_assessment("verdict: sufficient")
+    assert bare is not None and bare.is_empty and not bare.requires_more_research
+    assert parse_assessment("I think the research is fine.\nNote: none") is None
+
+
 def test_established_findings_are_written_back_in_the_reply_format():
     situation = ConcreteSituation("1848", evidence={1: "evidence"})
     situation.add_contradiction(Contradiction("capital", "labour", "wages", (1,)))

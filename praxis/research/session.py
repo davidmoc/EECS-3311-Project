@@ -34,9 +34,9 @@ class ResearchStatus(Enum):
 class ResearchBudget:
     """Upper limits on one research run. Reaching any of them stops it."""
 
-    max_iterations: int = 6
-    max_tool_calls: int = 10
-    max_duration_seconds: float = 180.0
+    max_iterations: int = 10
+    max_tool_calls: int = 14
+    max_duration_seconds: float = 240.0
     max_llm_calls: int = 4
 
     def __post_init__(self) -> None:
@@ -54,6 +54,7 @@ class StepRecord:
     new_sources: tuple[int, ...] = ()  # source numbers this step added
     error: str | None = None
     retry_of: int | None = None  # index of the step this one retried
+    is_assessment: bool = False  # an assessment of the situation, not a search
 
 
 @dataclass

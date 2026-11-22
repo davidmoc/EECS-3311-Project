@@ -11,6 +11,7 @@ from praxis.agent.response import ResponseStatus
 from praxis.documents import Citation
 from praxis.research.policy import StopReason
 from praxis.research.session import ResearchSession, utc_now
+from praxis.research.situation import ConcreteSituation
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,8 @@ class ResearchResult:
     cited: tuple[Source, ...] = ()
     open_questions: tuple[str, ...] = ()
     personalized: bool = False
+    # What the assessments established; None if research never got that far.
+    situation: ConcreteSituation | None = None
     created_at: datetime = field(default_factory=utc_now)
 
     @property

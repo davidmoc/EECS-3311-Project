@@ -14,7 +14,7 @@ from praxis.reader_model import ExplanationDepth, ReaderProfile
 
 MAX_SEARCH_TERMS = 8
 MAX_KNOWLEDGE_LINES = 12
-MAX_PLAN_STEPS = 5
+MAX_PLAN_STEPS = 4
 PLAN_STEP_KINDS = ("evidence", "theory", "history")
 
 # "history: 1848 revolution, bourgeoisie", optionally bulleted or numbered.
@@ -29,7 +29,7 @@ Marxist theory from primary sources. The library holds political theory and \
 history texts, mostly 19th and early 20th century translations, searched by \
 keyword.
 
-Write a research plan of 2 to 5 steps for the reader's question, one step \
+Write a research plan of 2 to 4 steps for the reader's question, one step \
 per line, in exactly this form:
 evidence: <keywords>
 theory: <keywords>
@@ -51,9 +51,10 @@ Organise the findings under these headings, in this order:
 ## Findings
 ## Historical context
 ## Theoretical connections
+## Contradictions
 {OPEN_QUESTIONS_HEADING}
 
-Under the first three headings, write prose that cites passages as [1], \
+Under the first four headings, write prose that cites passages as [1], \
 [2]. If the passages say nothing relevant for a heading, write one sentence \
 saying so. Under "{OPEN_QUESTIONS_HEADING}", list as "- " bullets two to \
 four questions the passages leave unanswered and that further research \
@@ -179,12 +180,16 @@ class PromptBuilder:
         purposes: dict[int, str],
         profile: ReaderProfile | None = None,
         unfinished: str | None = None,
+        established: list[str] | None = None,
+        questions: list[str] | None = None,
     ) -> Prompt:
         """A prompt asking the model to synthesise research findings.
 
         Sources are grouped by why they were retrieved. ``unfinished``
         explains why research stopped early, so the model says which parts
         are not covered instead of filling them from memory.
+        ``established`` and ``questions`` come from the assessments of the
+        concrete situation, so the synthesis builds on them.
         """
         if corpus.is_empty:
             raise ValueError("A research prompt needs at least one source.")
@@ -203,6 +208,16 @@ class PromptBuilder:
             user += (
                 f"Research stopped before every planned step ran: {unfinished}. "
                 "Say which parts of the question the passages do not cover.\n\n"
+            )
+        if established:
+            user += (
+                "Found while assessing the passages (check each against them "
+                "and build on it):\n" + "\n".join(f"- {line}" for line in established) + "\n\n"
+            )
+        if questions:
+            user += (
+                "Questions raised during the research:\n"
+                + "\n".join(f"- {q}" for q in questions) + "\n\n"
             )
         user += "Passages:\n\n" + _grouped_passages(corpus, purposes)
         return Prompt(system=system, user=user)

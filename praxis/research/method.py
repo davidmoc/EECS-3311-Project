@@ -30,6 +30,8 @@ from praxis.research.situation import (
 # "contradiction: a | b | c [1]", optionally bulleted, numbered or in bold.
 _LINE = re.compile(r"^\s*(?:[-*•]|\d+[.)])?\s*\**\s*([a-z]+)\s*\**\s*:\s*(.+?)\s*$", re.IGNORECASE)
 
+_KINDS = {"relation", "contradiction", "development", "conflict", "search", "question", "verdict"}
+
 ASSESSMENT_FAILED = "The research could not be assessed ({}), so the plan was not revised."
 ASSESSMENT_UNREADABLE = (
     "The research assessment could not be read, so the plan was not revised."
@@ -58,7 +60,11 @@ class DialecticalMaterialistResearchMethod:
             context.corpus,
             context.purposes,
             established=established_lines(situation),
-            searches_done=[step.description for step in session.steps if step.succeeded],
+            searches_done=[
+                step.description
+                for step in session.steps
+                if step.succeeded and not step.is_assessment
+            ],
         )
         try:
             response = self._llm.generate(prompt)
@@ -68,13 +74,17 @@ class DialecticalMaterialistResearchMethod:
             return None
         session.increment_llm_calls(response.total_tokens)
         assessment = parse_assessment(response.text)
-        if assessment.is_empty:
+        if assessment is None:
             session.add_warning(ASSESSMENT_UNREADABLE)
             return None
         return assessment
 
 
-def parse_assessment(text: str) -> ResearchAssessment:
+def parse_assessment(text: str) -> ResearchAssessment | None:
+    """The assessment in ``text``, or None if no line is in the reply format.
+
+    A reply of only "verdict: sufficient" is a valid, empty assessment.
+    """
     relations: list[MaterialRelation] = []
     contradictions: list[Contradiction] = []
     developments: list[HistoricalDevelopment] = []
@@ -82,6 +92,7 @@ def parse_assessment(text: str) -> ResearchAssessment:
     follow_ups: dict[FollowUp, None] = {}
     questions: list[str] = []
     verdict: bool | None = None  # True: more research needed
+    recognised = False
 
     for line in text.splitlines():
         match = _LINE.match(line)
@@ -94,6 +105,7 @@ def parse_assessment(text: str) -> ResearchAssessment:
         if not fields:
             continue
 
+        recognised = recognised or kind in _KINDS
         if kind == "relation" and len(fields) >= 2:
             relation_type = _relation_type(fields[0])
             if relation_type:
@@ -115,6 +127,8 @@ def parse_assessment(text: str) -> ResearchAssessment:
             word = fields[0].lower()
             verdict = not (word.startswith("sufficient") or word == "complete")
 
+    if not recognised:
+        return None
     chosen = tuple(follow_ups)[:MAX_FOLLOW_UPS]
     return ResearchAssessment(
         relations=tuple(relations),

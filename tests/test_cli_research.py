@@ -27,6 +27,7 @@ def test_research_shows_steps_sources_analysis_and_questions(seeded, run, monkey
     use_llm(
         monkeypatch, cli_database,
         "history: revolution 1848 Germany\ntheory: bourgeoisie proletariat",
+        "verdict: sufficient",
         "## Findings\nThe German bourgeoisie feared the workers [1].\n\n"
         "## Open questions\n- How did the peasantry act?\n",
     )
@@ -35,8 +36,8 @@ def test_research_shows_steps_sources_analysis_and_questions(seeded, run, monkey
 
     assert result.exit_code == 0, result.output
     out = result.output
-    assert "1. ✓ Trace historical development: revolution 1848 Germany  +4 sources" in out
-    assert "Stopped: every planned step has run." in out
+    assert "1. ✓ Trace historical development: revolution 1848 Germany  +3 sources" in out
+    assert "Stopped: the assessment found the research sufficiently developed." in out
     assert "[1] " in out and "(history)  (cited)" in out
     assert "Analysis (AI-generated)" in out
     assert "Findings\nThe German bourgeoisie feared the workers [1]." in out

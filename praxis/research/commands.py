@@ -23,8 +23,8 @@ from praxis.research.session import ResearchError, ResearchSession
 from praxis.tools import ToolManager, ToolResult
 
 PASSAGE_SEARCH = "passage_search"
-PASSAGES_PER_STEP = 4
-MAX_SOURCES = 12
+PASSAGES_PER_STEP = 3
+MAX_SOURCES = 20
 MAX_ATTEMPTS = 2
 
 

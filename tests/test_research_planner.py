@@ -80,10 +80,12 @@ def test_parse_plan_accepts_bullets_and_numbering_and_drops_the_rest():
     ]
 
 
-def test_parse_plan_keeps_at_most_five_steps():
+def test_parse_plan_keeps_at_most_four_steps():
+    """Four planned steps plus the question leave room in the source list
+    for the searches an assessment adds."""
     text = "\n".join(f"evidence: topic {n}" for n in range(9))
 
-    assert len(PromptBuilder.parse_plan(text)) == 5
+    assert len(PromptBuilder.parse_plan(text)) == 4
 
 
 def test_plan_prompt_mentions_the_reader_only_when_known():

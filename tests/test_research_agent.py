@@ -24,6 +24,8 @@ SYNTHESIS = (
     "## Theoretical connections\nThe state manages bourgeois affairs [3].\n\n"
     "## Open questions\n- What did the peasantry do?\n- Why was Prussia decisive?\n"
 )
+# An assessment that adds findings but asks for nothing more.
+SUFFICIENT = "development: The bourgeoisie turned against the revolution [1]\nverdict: sufficient"
 
 
 class FlakySearch(Tool):
@@ -54,18 +56,19 @@ def make_agent(database, llm, tool=None):
 
 
 def test_research_plans_retrieves_and_synthesises(library_database):
-    llm = ScriptedLLM(PLAN, SYNTHESIS)
+    llm = ScriptedLLM(PLAN, SUFFICIENT, SYNTHESIS)
 
     result = make_agent(library_database, llm).research(OBJECTIVE)
 
     session = result.session
     assert result.status is ResponseStatus.ANSWERED and result.is_grounded
     assert session.status is ResearchStatus.COMPLETED
-    assert result.stop_reason is StopReason.PLAN_COMPLETE
+    assert result.stop_reason is StopReason.SUFFICIENT
     assert [step.description for step in session.steps] == [
         "Trace historical development: 1848 revolution Germany",
         "Retrieve theory: bourgeoisie state",
         f"Retrieve evidence: {OBJECTIVE}",
+        "Assess the research so far: 1 historical development; research judged sufficient",
     ]
     assert all(step.succeeded for step in session.steps)
     assert result.purposes[1] == "history"
@@ -75,9 +78,11 @@ def test_research_plans_retrieves_and_synthesises(library_database):
     assert result.open_questions == ("What did the peasantry do?", "Why was Prussia decisive?")
     assert [s.number for s in result.cited] == [1, 2, 3]
     assert result.warnings == ()
-    assert (session.llm_call_count, session.tokens_used) == (2, 30)
+    assert (session.llm_call_count, session.tokens_used) == (3, 45)
     assert session.tool_call_count == 3
     assert "### Retrieved for historical development" in llm.prompts[1].user
+    assert result.situation.developments[0].evidence == (1,)
+    assert "- development: The bourgeoisie turned against the revolution [1]" in llm.prompts[2].user
 
 
 def test_no_sources_means_no_analysis(library_database):
@@ -93,7 +98,7 @@ def test_no_sources_means_no_analysis(library_database):
 
 
 def test_a_failed_step_is_retried_next_and_linked_to_the_failure(library_database):
-    llm = ScriptedLLM(PLAN, SYNTHESIS)
+    llm = ScriptedLLM(PLAN, SUFFICIENT, SYNTHESIS)
     agent = make_agent(library_database, llm, FlakySearch(library_database, failures=1))
 
     result = agent.research(OBJECTIVE)
@@ -107,7 +112,7 @@ def test_a_failed_step_is_retried_next_and_linked_to_the_failure(library_databas
 
 
 def test_a_step_that_keeps_failing_is_reported_missing(library_database):
-    llm = ScriptedLLM(PLAN, SYNTHESIS)
+    llm = ScriptedLLM(PLAN, SUFFICIENT, SYNTHESIS)
     # Both attempts of the first step fail; the rest succeed.
     agent = make_agent(library_database, llm, FlakySearch(library_database, failures=2))
 
@@ -143,14 +148,14 @@ def test_without_a_model_the_sources_are_still_gathered(library_database):
 
 
 def test_synthesis_failure_keeps_the_sources(library_database):
-    llm = ScriptedLLM(PLAN, LLMError("rate limited"))
+    llm = ScriptedLLM(PLAN, SUFFICIENT, LLMError("rate limited"))
 
     result = make_agent(library_database, llm).research(OBJECTIVE)
 
     assert result.status is ResponseStatus.EXPLANATION_FAILED
     assert result.sources and result.summary is None
     assert result.warnings[-1] == "The analysis could not be generated: rate limited"
-    assert result.session.llm_call_count == 2
+    assert result.session.llm_call_count == 3
 
 
 def test_no_synthesis_when_the_model_budget_is_spent(library_database):
@@ -166,7 +171,7 @@ def test_no_synthesis_when_the_model_budget_is_spent(library_database):
 
 
 def test_citations_outside_the_sources_are_flagged(library_database):
-    llm = ScriptedLLM(PLAN, "## Findings\nThe revolution failed [1] [9].")
+    llm = ScriptedLLM(PLAN, SUFFICIENT, "## Findings\nThe revolution failed [1] [9].")
 
     result = make_agent(library_database, llm).research(OBJECTIVE)
 
@@ -188,3 +193,74 @@ def test_packages_import_in_any_order(module):
         capture_output=True, text=True,
     )
     assert completed.returncode == 0, completed.stderr
+
+
+# --- assessment and plan revision (SD01 loop) ------------------------------------
+
+MORE = (
+    "contradiction: bourgeoisie | workers | the bourgeoisie feared the workers it needed [2]\n"
+    "relation: class | Workers fought while the liberals held back [9]\n"
+    "search: relation | wage labour subsistence\n"
+    "question: Did the workers have their own organisations?\n"
+    "verdict: more research needed"
+)
+
+
+def test_assessment_adds_searches_that_run_before_research_stops(library_database):
+    llm = ScriptedLLM(PLAN, MORE, SUFFICIENT, SYNTHESIS)
+
+    result = make_agent(library_database, llm).research(OBJECTIVE)
+
+    steps = [step.description for step in result.session.steps]
+    assert steps[3:] == [
+        "Assess the research so far: 1 contradiction, 1 relation; 1 search added",
+        "Investigate relation: wage labour subsistence",
+        "Assess the research so far: 1 historical development; research judged sufficient",
+    ]
+    assert result.session.steps[3].is_assessment and result.session.iteration_count == 4
+    assert result.stop_reason is StopReason.SUFFICIENT
+    new = result.session.steps[4].new_sources
+    assert new and all(result.purposes[n] == "relation" for n in new)
+    situation = result.situation
+    assert situation.contradictions[0].pole_b == "workers"
+    assert situation.relations == []  # cited [9], which was never retrieved
+    assert "1 finding from the assessment cited no retrieved passage and was left out." in result.warnings
+    # The second assessment sees the first one's findings and searches.
+    assert "Already established (do not repeat these):\n- contradiction: bourgeoisie | workers" in llm.prompts[2].user
+    assert "- Investigate relation: wage labour subsistence" in llm.prompts[2].user
+    synthesis = llm.prompts[3].user
+    assert "Questions raised during the research:\n- Did the workers have their own organisations?" in synthesis
+    assert "## Contradictions" in llm.prompts[3].system
+
+
+def test_research_stops_when_the_assessment_only_repeats_searches(library_database):
+    repeat = "search: history | 1848 revolution Germany\nverdict: more research needed"
+    llm = ScriptedLLM(PLAN, repeat, SYNTHESIS)
+
+    result = make_agent(library_database, llm).research(OBJECTIVE)
+
+    assert result.stop_reason is StopReason.NO_USEFUL_STEPS
+    assert result.session.steps[-1].description.endswith("; no new search to add")
+    assert result.status is ResponseStatus.ANSWERED
+
+
+def test_a_failed_assessment_still_lets_the_sources_be_synthesised(library_database):
+    llm = ScriptedLLM(PLAN, LLMError("timeout"), SYNTHESIS)
+
+    result = make_agent(library_database, llm).research(OBJECTIVE)
+
+    last = result.session.steps[-1]
+    assert last.is_assessment and not last.succeeded
+    assert result.stop_reason is StopReason.PLAN_COMPLETE
+    assert "The research could not be assessed (timeout)" in result.warnings[0]
+    assert result.status is ResponseStatus.ANSWERED
+
+
+def test_no_assessment_when_it_would_leave_no_call_for_the_synthesis(library_database):
+    llm = ScriptedLLM(PLAN, SYNTHESIS)
+
+    result = make_agent(library_database, llm).research(OBJECTIVE, ResearchBudget(max_llm_calls=2))
+
+    assert not any(step.is_assessment for step in result.session.steps)
+    assert result.stop_reason is StopReason.PLAN_COMPLETE
+    assert result.status is ResponseStatus.ANSWERED

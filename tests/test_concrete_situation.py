@@ -97,8 +97,8 @@ def test_assessment_names_its_gaps_and_summarises_itself():
 
     assert assessment.missing_relations == ["peasants landlords"]
     assert assessment.historical_questions == ["Frankfurt assembly"]
-    assert assessment.summary() == "2 contradictions, 1 relation; 2 follow-up searches"
-    assert ResearchAssessment().summary() == "no new findings; research judged sufficient"
+    assert assessment.summary() == "2 contradictions, 1 relation"
+    assert ResearchAssessment().summary() == "no new findings"
     assert ResearchAssessment().is_empty
 
 

@@ -11,15 +11,20 @@ from praxis.agent.prompts import PromptBuilder, reader_context
 from praxis.agent.response import AgentResponse, ResponseStatus
 from praxis.llm import LLMClient, LLMError
 from praxis.reader_model.service import ReaderProfileService
+from praxis.research.assessment import ResearchAssessment
 from praxis.research.commands import ResearchCommand, ResearchContext
+from praxis.research.method import DialecticalMaterialistResearchMethod, established_lines
+from praxis.research.plan import ResearchPlan
 from praxis.research.planner import ResearchPlanner
 from praxis.research.policy import ResearchStoppingPolicy, StopReason
 from praxis.research.result import ResearchResult
 from praxis.research.session import ResearchBudget, ResearchSession, StepRecord
+from praxis.research.situation import ConcreteSituation, ConcreteSituationBuilder
 from praxis.tools import ToolManager
 
 PASSAGES_PER_QUESTION = 6
 PASSAGE_SEARCH = "passage_search"
+ASSESS_STEP = "Assess the research so far"
 
 NO_SOURCES_WARNING = (
     "No passage in the library addresses this question, so no answer was "
@@ -60,15 +65,19 @@ class PoliticalResearchAgent:
         prompts: PromptBuilder | None = None,
         planner: ResearchPlanner | None = None,
         policy: ResearchStoppingPolicy | None = None,
+        method: DialecticalMaterialistResearchMethod | None = None,
+        builder: ConcreteSituationBuilder | None = None,
     ) -> None:
         """``llm`` may be None: the agent then still retrieves passages but
-        cannot explain them."""
+        cannot assess or explain them."""
         self._tools = tools
         self._profiles = profiles
         self._llm = llm
         self._prompts = prompts or PromptBuilder()
         self._planner = planner or ResearchPlanner(llm, self._prompts)
         self._policy = policy or ResearchStoppingPolicy()
+        self._method = method or DialecticalMaterialistResearchMethod(llm, self._prompts)
+        self._builder = builder or ConcreteSituationBuilder()
 
     # --- F03: multi-step research --------------------------------------------
 
@@ -86,9 +95,22 @@ class PoliticalResearchAgent:
         profile = self._profiles.get_profile()
         plan = self._planner.create_initial_plan(session, profile)
         context = ResearchContext(session, self._tools, profile=profile)
+        situation = self._builder.build_initial_situation(session.objective)
 
         retried_from: dict[ResearchCommand, int] = {}  # retry -> failed step index
-        while (stop := self._policy.stop_reason(session, budget, plan, context)) is None:
+        assessment: ResearchAssessment | None = None  # of the sources so far
+        while True:
+            stop = self._policy.stop_reason(session, budget, plan, context, assessment)
+            # When the plan runs out, assess what was found and let the
+            # assessment revise the plan; the policy then decides again.
+            if stop is StopReason.PLAN_COMPLETE and self._can_assess(session, budget, context):
+                assessment = self._assess_and_revise(situation, context, plan)
+                if assessment is not None:
+                    continue
+            if stop is not None:
+                break
+
+            assessment = None  # the next step's sources are not yet assessed
             command = plan.get_next_command()
             session.increment_iteration()
             outcome = command.execute(context)
@@ -101,12 +123,56 @@ class PoliticalResearchAgent:
                     retry_of=retried_from.pop(command, None),
                 )
             )
-            if not outcome.succeeded:
+            if outcome.succeeded:
+                self._builder.update_situation(situation, outcome, context)
+            else:
                 retry = self._planner.revise_after_failure(plan, command, outcome.error, session)
                 if retry is not None:
                     retried_from[retry] = index
 
-        return self._finish_research(session, budget, plan.pending, context, stop)
+        return self._finish_research(session, budget, plan.pending, context, situation, stop)
+
+    def _can_assess(
+        self, session: ResearchSession, budget: ResearchBudget, context: ResearchContext
+    ) -> bool:
+        """An assessment needs sources and a model call, and must leave one
+        model call for the synthesis."""
+        return (
+            self._method.available
+            and not context.corpus.is_empty
+            and session.llm_call_count + 1 < budget.max_llm_calls
+        )
+
+    def _assess_and_revise(
+        self, situation: ConcreteSituation, context: ResearchContext, plan: ResearchPlan
+    ) -> ResearchAssessment | None:
+        """SD01's assess → updateSituation → revisePlan, recorded as a step."""
+        session = context.session
+        assessment = self._method.assess(situation, context)
+        if assessment is None:
+            session.record_step(
+                StepRecord(ASSESS_STEP, False, error="no usable assessment", is_assessment=True)
+            )
+            return None
+
+        rejected = self._builder.integrate_assessment(situation, assessment)
+        if rejected:
+            session.add_warning(
+                f"{rejected} finding{'s' if rejected != 1 else ''} from the assessment "
+                "cited no retrieved passage and "
+                f"{'were' if rejected != 1 else 'was'} left out."
+            )
+        added = self._planner.revise_plan(plan, assessment)
+        if not assessment.requires_more_research:
+            outcome = "research judged sufficient"
+        elif added:
+            outcome = f"{len(added)} search{'es' if len(added) != 1 else ''} added"
+        else:
+            outcome = "no new search to add"
+        session.record_step(
+            StepRecord(f"{ASSESS_STEP}: {assessment.summary()}; {outcome}", True, is_assessment=True)
+        )
+        return assessment
 
     def _finish_research(
         self,
@@ -114,13 +180,14 @@ class PoliticalResearchAgent:
         budget: ResearchBudget,
         skipped: list[ResearchCommand],
         context: ResearchContext,
+        situation: ConcreteSituation,
         stop: StopReason,
     ) -> ResearchResult:
         corpus = context.corpus
         if corpus.is_empty:
             session.add_warning(NO_RESEARCH_SOURCES)
             session.fail("no sources found")
-            return ResearchResult(session, ResponseStatus.NO_SOURCES, stop)
+            return ResearchResult(session, ResponseStatus.NO_SOURCES, stop, situation=situation)
 
         unfinished = None
         if stop.is_budget and skipped:
@@ -133,7 +200,7 @@ class PoliticalResearchAgent:
             session.complete()
             return ResearchResult(
                 session, ResponseStatus.EXPLANATION_FAILED, stop,
-                tuple(corpus.sources), dict(context.purposes),
+                tuple(corpus.sources), dict(context.purposes), situation=situation,
             )
 
         if self._llm is None:
@@ -142,7 +209,9 @@ class PoliticalResearchAgent:
             return partial(NO_SYNTHESIS_BUDGET)
 
         prompt = self._prompts.build_research_prompt(
-            session.objective, corpus, context.purposes, context.profile, unfinished
+            session.objective, corpus, context.purposes, context.profile, unfinished,
+            established=established_lines(situation),
+            questions=situation.unresolved_questions,
         )
         try:
             response = self._llm.generate(prompt)
@@ -173,6 +242,7 @@ class PoliticalResearchAgent:
             cited=tuple(cited),
             open_questions=tuple(questions),
             personalized=reader_context(context.profile) is not None,
+            situation=situation,
         )
 
     # --- F04: source-first question answering ------------------------------

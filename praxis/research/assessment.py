@@ -66,8 +66,7 @@ class ResearchAssessment:
         return not (self.finding_count or self.follow_ups or self.unresolved_questions)
 
     def summary(self) -> str:
-        """One line for the step log, e.g. "2 contradictions, 1 relation;
-        3 follow-up searches"."""
+        """What was found, for the step log, e.g. "2 contradictions, 1 relation"."""
         parts = [
             _count(len(self.contradictions), "contradiction"),
             _count(len(self.relations), "relation"),
@@ -75,12 +74,7 @@ class ResearchAssessment:
             _count(len(self.conflicting_evidence), "conflict between sources",
                    "conflicts between sources"),
         ]
-        found = ", ".join(p for p in parts if p) or "no new findings"
-        if not self.requires_more_research:
-            return f"{found}; research judged sufficient"
-        if self.follow_ups:
-            return f"{found}; {_count(len(self.follow_ups), 'follow-up search', 'follow-up searches')}"
-        return f"{found}; no follow-up search proposed"
+        return ", ".join(p for p in parts if p) or "no new findings"
 
 
 def _count(n: int, singular: str, plural: str | None = None) -> str:
