@@ -84,7 +84,7 @@ def read_summary(event: Event, text: str) -> Event:
     extent = extent.strip(" *").lower()
     if extent.startswith(("no", "partly", "part")) and len(event.reports) > 1:
         grouping = Grouping.UNCERTAIN
-        reason = reason.strip()
+        reason = reason.strip().rstrip(".")  # the message adds its own full stop
         notes.append(NOT_ONE_EVENT.format(
             extent="not all" if extent.startswith("no") else "only partly",
             reason=f": {reason}" if reason else "",

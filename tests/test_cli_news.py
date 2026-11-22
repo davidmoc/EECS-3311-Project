@@ -139,7 +139,8 @@ def test_dashboard_shows_event_cards(run, monkeypatch, cli_database):
     assert re.search(r"1\. Fire at Indonesian candy factory  \[[0-9a-f]{8}\]", out)
     assert "labour · 2 outlets: Wire A, Wire B" in out
     assert "Summary (AI-generated from the reports): Three workers died [1]" in out
-    assert "[1] Wire A: Fire at Indonesian candy factory kills three" in out
+    # Live run: report lines lost their indent.
+    assert re.search(r"^   \[1\] Wire A: Fire at Indonesian candy factory kills three \([0-9a-f]{8}\)$", out, re.MULTILINE)
     assert "2. Liverpool thrash United" in out
     assert "Single report: no other outlet in the feeds has reported it." in out
     assert "Wire C writes: Dockworkers walked out" in out

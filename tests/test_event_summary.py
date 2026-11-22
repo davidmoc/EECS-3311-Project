@@ -87,3 +87,9 @@ def test_model_failure_falls_back_to_headlines():
 def test_without_a_model_the_card_shows_headlines():
     outcome = NewsSummaryService(None).summarize(EVENT)
     assert outcome.event.summary_status is SummaryStatus.HEADLINES_ONLY
+
+
+def test_a_reason_ending_in_a_full_stop_gets_only_one():
+    """Live run: the note ended "...the same specific incident.."."""
+    event = read_summary(EVENT, REPLY.replace("same event: yes", "same event: partly | [2] is broader."))
+    assert event.note == "The model judged that these reports are only partly about one event: [2] is broader."

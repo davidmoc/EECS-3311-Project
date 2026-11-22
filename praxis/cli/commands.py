@@ -547,9 +547,9 @@ def _print_event_card(number: int, event: Event) -> None:
     if event.summary_status is SummaryStatus.HEADLINES_ONLY:
         typer.secho("   No summary is shown; read the reports:", fg=typer.colors.YELLOW)
     for index, report in enumerate(event.reports, start=1):
-        typer.echo(textwrap.shorten(
-            f"   [{index}] {report.outlet}: {report.title} ({_short_id(report)})", width=100, placeholder="…",
-        ))
+        # shorten() collapses whitespace, so the indent is added after it.
+        line = textwrap.shorten(f"{report.outlet}: {report.title}", width=80, placeholder="…")
+        typer.echo(f"   [{index}] {line} ({_short_id(report)})")
 
 
 @news_app.command("refresh")
