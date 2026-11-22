@@ -5,11 +5,10 @@ theory through a Marxist analytical framework. The Stage 1 design is in
 [`Stage 1 - Proposal/`](Stage%201%20-%20Proposal/).
 
 > **Status:** Stage 2 implementation in progress. Working now through the
-> CLI: a first version of the multi-step research agent (F03),
-> source-first question answering (F04), the reading library (F05), the
-> reader model (F13) and the workspace (F15). The research agent does not
-> yet revise its plan from an assessment of what it found, or save
-> sessions. The news dashboard and GUI are not built yet.
+> CLI: the multi-step research agent (F03), source-first question
+> answering (F04), the reading library (F05), the reader model (F13) and
+> the workspace (F15). Research sessions are not saved or continued yet.
+> The news dashboard and GUI are not built yet.
 
 ## Prerequisites
 
@@ -78,10 +77,17 @@ python -m praxis workspace open <item-id>
 ```
 
 `research` asks the model for a short plan of typed steps (evidence,
-theory, history), runs them as library searches within a budget, retries
-a failed step once, and then has the model write findings, historical
-context, theoretical connections and open questions, citing `[n]`. It
-prints every step it took and anything it could not do.
+theory, history) and runs them as library searches within a budget,
+retrying a failed step once. When the planned steps run out, the model
+assesses the passages (material relations, contradictions, historical
+development, sources that disagree) and proposes follow-up searches,
+which are added to the plan. Findings that cite no retrieved passage are
+left out. Research stops when the assessment finds it sufficient, when
+it proposes nothing new, or when the budget or the 20-source limit is
+reached. The model then writes findings, historical context, theoretical
+connections, contradictions and open questions, citing `[n]`. The command
+prints every step (assessments are marked ◆), the concrete situation the
+assessments established, and anything it could not do.
 
 `ask` searches the library's paragraphs, shows the ones that address the
 question, and only then asks the model to explain them, citing `[n]`. If
@@ -112,6 +118,7 @@ API key and no network access.
 | `praxis/library/` | `LibraryService`, `DocumentProvider`, Gutenberg adapter |
 | `praxis/llm/` | `LLMClient` interface and the OpenAI adapter |
 | `praxis/persistence/` | SQLite database and repositories |
+| `praxis/research/` | Research session, commands, plan, planner, concrete situation, assessment method, stopping policy |
 | `praxis/reader_model/` | Reader profile, its service, event bus and updater |
 | `praxis/tools/` | Agent tools, tool manager and tool factory |
 | `praxis/workspace/` | Saved items, workspace and its service |
