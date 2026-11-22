@@ -6,9 +6,9 @@ theory through a Marxist analytical framework. The Stage 1 design is in
 
 > **Status:** Stage 2 implementation in progress. Working now through the
 > CLI: the multi-step research agent (F03), source-first question
-> answering (F04), the reading library (F05), the reader model (F13) and
-> the workspace (F15). Research sessions are not saved or continued yet.
-> The news dashboard and GUI are not built yet.
+> answering (F04), the reading library (F05), AI-annotated reading (F06),
+> the reader model (F13) and the workspace (F15). The news dashboard and
+> GUI are not built yet.
 
 ## Prerequisites
 
@@ -71,6 +71,12 @@ python -m praxis library read 59983f05 --find "hitherto existing"
 python -m praxis library download 59983f05 --to downloads
 python -m praxis library import 1346 -t history   # any Project Gutenberg book
 
+# Annotated reading (F06): AI annotations kept beside the author's text
+python -m praxis annotate abdc2552 259 --type historical-context
+python -m praxis library read abdc2552 --start 259 --count 1 --annotations
+python -m praxis annotations list abdc2552
+python -m praxis annotations remove 1a3c3cde        # id shown in brackets
+
 # Reader model (F13): see and correct what the system believes about you
 python -m praxis profile show
 python -m praxis profile know "surplus value" introductory
@@ -109,6 +115,18 @@ question, and only then asks the model to explain them, citing `[n]`. If
 no passage fits, it says so instead of answering from the model's memory.
 Without an API key it still shows the passages.
 
+`annotate` annotates one paragraph. The `--type` is `terminology`,
+`historical-context`, `argument`, `framing`, `fact-check` or `connection`.
+The model sees the paragraph with the paragraphs around it (two on each
+side for a short paragraph). For historical context, fact checks and
+connections, it also sees up to three other library passages that share
+the paragraph's words, which it cites as `[n]`. Annotations are printed
+behind a `┃` bar and marked as AI-generated. Anything the model could not
+verify is listed under "Could not be verified", and references to
+paragraphs the model was not shown are warned about. Annotations are
+stored with the text, and `library read` marks the paragraphs that have
+them (✎).
+
 Reading with `library read` updates your reading progress, interests and
 inferred knowledge automatically; `profile know` always overrides inference.
 
@@ -134,6 +152,7 @@ API key and no network access.
 | `praxis/llm/` | `LLMClient` interface and the OpenAI adapter |
 | `praxis/persistence/` | SQLite database and repositories |
 | `praxis/research/` | Research session, commands, plan, planner, concrete situation, assessment method, stopping policy |
+| `praxis/reading/` | `AnnotationService` (F06) |
 | `praxis/reader_model/` | Reader profile, its service, event bus and updater |
 | `praxis/tools/` | Agent tools, tool manager and tool factory |
 | `praxis/workspace/` | Saved items, workspace and its service |
