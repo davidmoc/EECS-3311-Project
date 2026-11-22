@@ -98,8 +98,8 @@ assessments established, and anything it could not do.
 
 Every research run is stored with its sources, findings and plan.
 `sessions continue` runs another round of a stored session: the reader's
-`--focus` is planned and searched first, then any steps a limit left
-unrun, then the usual assessment. Earlier sources keep their numbers,
+`--focus` is searched first as typed, then the model's plan for it, then
+any steps a limit left unrun, then the usual assessment. Earlier sources keep their numbers,
 earlier searches are not repeated, each round has its own budget and may
 add up to 10 sources, and the analysis is rewritten over all of them.
 Research cut short by a limit is listed as incomplete.

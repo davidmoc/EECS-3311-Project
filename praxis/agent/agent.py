@@ -120,7 +120,8 @@ class PoliticalResearchAgent:
         ``continueResearch(sessionId, request)``).
 
         The earlier sources keep their numbers and the earlier findings are
-        kept. The round runs ``focus`` (if given) first, then any steps a
+        kept. The round runs ``focus`` (if given: the focus as typed, then
+        the model's plan for it) first, then any steps a
         limit left unrun, then assesses as usual; ``budget`` applies to this
         round only. The analysis is rewritten over all the sources.
         """

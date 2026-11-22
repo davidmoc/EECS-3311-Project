@@ -54,13 +54,16 @@ class ResearchPlanner:
         self, session: ResearchSession, focus: str, profile: ReaderProfile | None = None
     ) -> list[ResearchCommand]:
         """Commands for continuing ``session`` in the direction ``focus``:
-        the model's steps, then the focus as given, to top up."""
+        the focus as the reader typed it first, then the model's steps.
+
+        The reader's own words go first because a round's source limit can
+        end it before every step runs."""
         commands = self._ask_for_plan(
             session, self._prompts.build_follow_up_plan_prompt(session.objective, focus, profile)
         )
         if not commands:
             session.add_warning(FALLBACK_FOLLOW_UP_WARNING)
-        return [*commands, RetrieveEvidenceCommand(focus)]
+        return [RetrieveEvidenceCommand(focus), *commands]
 
     def revise_plan(
         self, plan: ResearchPlan, assessment: ResearchAssessment

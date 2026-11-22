@@ -59,7 +59,8 @@ def test_continuing_with_a_focus_keeps_earlier_sources_and_adds_new_ones(library
     assert second.sources[: len(first.sources)] == first.sources
     assert len(second.sources) > len(first.sources)
     new_steps = [s.description for s in session.steps if s.round == 2]
-    assert new_steps[:2] == ["Retrieve theory: wage labour subsistence", f"Retrieve evidence: {FOCUS}"]
+    # The focus as typed runs first, so a source limit cannot skip it.
+    assert new_steps[:2] == [f"Retrieve evidence: {FOCUS}", "Retrieve theory: wage labour subsistence"]
     # The follow-up plan prompt names the focus; the synthesis sees it too.
     assert FOCUS in llm.prompts[0].user and "already been researched" in llm.prompts[0].user
     assert "Follow-up directions from the reader:\n- wage labour" in llm.prompts[-1].user
