@@ -218,3 +218,18 @@ platform.openai.com.
   - `ResearchView`/`ResearchController` are played by `praxis compare`. Comparisons are not stored yet, and cannot yet be started from a research session or an event.
 - **Human contribution:** Asked for the next five slices. The code has not been reviewed yet.
 - **Outcome:** Seven code commits and this documentation commit.
+
+### 2026-11-22 — Source and framing comparison, second slice: stored comparisons and comparison from research (F10)
+
+- **Task:** Keep comparisons so they can be reopened, save them to the workspace, and start a comparison from a research session (F10: "requests a comparison from an event or research view").
+- **Input/Instruction:** Second of the five slices requested.
+- **AI contribution:** Moved the JSON encoding of numbered sources into `praxis/persistence/sources.py`, shared by research and comparison storage. Added `ComparisonRepository` with `SQLComparisonRepository` (a `comparisons` table), and in the agent `compare_research_sources`, `get_comparison`, `find_comparison` and `list_comparisons`. Added `WorkspaceService.save_comparison` with a `comparison` item kind, and the commands `compare --save`, `comparisons list|show` and `sessions compare`; `workspace open` links a saved comparison back to it. The keyword model call is now skipped when every source names its paragraphs. 484 automated tests. Live run against `gpt-5-mini` on the scratch database: `research "How did the bourgeoisie behave in the revolutions of 1848?"` (141 s, 34,275 tokens, 20 sources: 16 from *The Eighteenth Brumaire*, 3 from *Revolution and Counter-Revolution*, 1 from the Manifesto), then `sessions compare` on it with `--save` (30 s, 6,992 tokens). The comparison judged the three texts comparable while noting they treat different countries and levels. It gave 3 points of shared ground, 4 differences, 3 observations and no factual disagreements, and was stored and saved. Terms it attributed to the passages were checked and are there: "aristocracy of finance", "fractions" and "small traders" (¶53 of the *Brumaire*), "petty traders" (¶321 of *Revolution and Counter-Revolution*) and "world-market" (¶21 of the Manifesto).
+- **Problems met:**
+  - The live run compared only 6 of the 16 *Brumaire* passages without saying so: `CompareSourcesCommand` cut named paragraphs at 6 silently. Fixed in its own commit (`c43fe96`): the reader is now told how many were named and which were compared. Regression test confirmed to fail before the fix.
+  - The live comparison's differences contained empty "()": the model wrote citations inside brackets ("([10])"), and stripping the citation marks left the brackets. Fixed in its own commit (`dc3850a`), with a regression test confirmed to fail before the fix.
+  - A first check that the paragraph-cap test fails without the fix was invalid: `git stash` also removed the new test. It was redone stashing only the source file.
+- **Design changes from Stage 1 introduced here:**
+  - Comparisons are stored whole as JSON with the passage text, like research results, and only when two or more sources had passages. A failure to store becomes a warning.
+  - Comparing from a research view is `compare_research_sources(session_id)`: the research question is the subject, and the research's own passages are compared (up to four texts, those that supplied most passages, at most six passages each). It needs a research session that drew on two texts or more. Comparing from an event waits for F01/F02.
+- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Outcome:** Six code commits and this documentation commit.
