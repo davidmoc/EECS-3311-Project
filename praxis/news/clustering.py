@@ -22,6 +22,8 @@ from datetime import date
 from praxis.documents import NewsArticle
 from praxis.news.events import Event, Grouping
 
+# Reports this similar to an event, but not grouped with it, are shown as related (F02).
+RELATED_THRESHOLD = 0.15
 JOIN_THRESHOLD = 0.30
 CONFIDENT_THRESHOLD = 0.40
 MAX_DAYS_APART = 2
@@ -115,6 +117,24 @@ class EventClusterer:
 
 
 _EPOCH = date(1970, 1, 1)
+
+
+def related_reports(
+    event: Event, candidates: list[NewsArticle], limit: int, minimum: float = RELATED_THRESHOLD
+) -> list[NewsArticle]:
+    """Candidates not in ``event`` whose words resemble any of its reports,
+    most similar first."""
+    own = {r.id for r in event.reports}
+    others = list({c.id: c for c in candidates if c.id not in own}.values())
+    vectors = _tf_idf([_words(a) for a in [*event.reports, *others]])
+    mine, theirs = vectors[: len(event.reports)], vectors[len(event.reports):]
+    scored = [
+        (max(_cosine(v, m) for m in mine), article)
+        for v, article in zip(theirs, others)
+    ]
+    scored = [(score, a) for score, a in scored if score >= minimum]
+    scored.sort(key=lambda pair: -pair[0])
+    return [article for _, article in scored[:limit]]
 
 
 def _rank(event: Event) -> tuple:

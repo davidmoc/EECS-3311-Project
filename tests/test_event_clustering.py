@@ -89,3 +89,11 @@ def test_an_event_needs_a_report():
 def test_duplicate_reports_are_counted_once():
     events = EventClusterer().cluster([FIRE[0], FIRE[0]])
     assert len(events[0].reports) == 1
+
+
+def test_related_reports_resemble_the_event_but_were_not_grouped():
+    from praxis.news.clustering import related_reports
+
+    event = Event(tuple(FIRE[:2]), Grouping.CONFIDENT)
+    found = related_reports(event, [FIRE[0], FIRE[2], LONE, *CLIMATE], limit=4)
+    assert found == [FIRE[2]]

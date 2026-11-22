@@ -136,3 +136,11 @@ def test_unknown_events_are_reported(database):
     service = news_service(database, None)
     with pytest.raises(NewsError, match="No event"):
         service.find_event("abcd")
+
+
+def test_an_event_can_be_opened_in_its_expanded_view(database):
+    service = news_service(database, ScriptedLLM(CARD))
+    fire = service.get_dashboard_events().events[0]
+    expanded = service.get_expanded_event(fire.id)
+    assert expanded.event == fire
+    assert [s.citation.document_title for s in expanded.report_sources] == [r.title for r in fire.reports]

@@ -19,6 +19,7 @@ from praxis.library import (
 )
 from praxis.llm import LLMClient, OpenAILLMAdapter
 from praxis.news import NewsProvider, RSSNewsAdapter, read_feeds
+from praxis.news.exploration import EventExplorer
 from praxis.news.service import NewsService
 from praxis.news.summary import NewsSummaryService
 from praxis.persistence.events import SQLEventRepository
@@ -104,6 +105,7 @@ def build_application(
             documents,
             summaries=NewsSummaryService(llm),
             events=SQLEventRepository(database, documents),
+            explorer=EventExplorer(documents, llm),
         ),
         owns_database=owns_database,
     )

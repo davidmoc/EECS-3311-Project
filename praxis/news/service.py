@@ -24,6 +24,7 @@ from uuid import UUID
 from praxis.documents import NewsArticle
 from praxis.news.clustering import EventClusterer
 from praxis.news.events import Event, SummaryStatus
+from praxis.news.exploration import EventExplorer, ExpandedEvent
 from praxis.news.providers import NewsProvider, NewsProviderError
 from praxis.news.summary import NewsSummaryService
 from praxis.persistence import DocumentRepository
@@ -84,6 +85,7 @@ class NewsService:
         clusterer: EventClusterer | None = None,
         summaries: NewsSummaryService | None = None,
         events: EventRepository | None = None,
+        explorer: EventExplorer | None = None,
     ) -> None:
         """Without ``summaries`` events show their headlines only; without
         ``events`` they are not stored, so summaries are not reused."""
@@ -93,6 +95,7 @@ class NewsService:
         self._clusterer = clusterer or EventClusterer()
         self._summaries = summaries or NewsSummaryService(None)
         self._events = events
+        self._explorer = explorer or EventExplorer(documents, today=today)
 
     def get_dashboard_events(
         self, days: int = DEFAULT_DAYS, limit: int = DEFAULT_EVENTS, refresh: bool = True
@@ -132,6 +135,11 @@ class NewsService:
         if event is None:
             raise NewsError(f"There is no stored event {event_id}.")
         return event
+
+    def get_expanded_event(self, event_id: UUID) -> ExpandedEvent:
+        """F02: the event with related reports, library background and a
+        longer account of it."""
+        return self._explorer.explore(self.get_event(event_id))
 
     def find_event(self, id_prefix: str) -> UUID:
         prefix = id_prefix.strip().lower()

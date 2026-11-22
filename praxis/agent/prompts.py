@@ -224,6 +224,35 @@ not adopt one outlet's framing or loaded words as your own.
 or "partly", and summarise only the event of report [1].
 - No other text."""
 
+EVENT_EXPLORATION_RULES = f"""\
+You expand a news event for readers of Praxis, a platform for studying \
+politics, history and Marxist theory from primary sources. The reader has \
+the reports and passages beside your account and can open them.
+
+Write these sections, in this order:
+## What happened
+## Where the reports differ
+## Background from the library
+{OPEN_QUESTIONS_HEADING}
+
+Rules:
+- "What happened" uses only the numbered reports, and cites them as [1], \
+[2]. Do not add facts, figures or background from memory.
+- "Where the reports differ": set out each report's account of any fact \
+they disagree on, with its citation; do not decide which is right. Note \
+differences in emphasis or wording that change the picture. If they do \
+not differ, say so in one sentence.
+- "Background from the library": the library passages are political \
+theory and history, mostly from the 19th and early 20th centuries. Use \
+them only where they genuinely bear on the event, cite them, and present \
+the connection as interpretation. If none bear on it, say so in one \
+sentence.
+- Under "{OPEN_QUESTIONS_HEADING}", list as "- " bullets two to four \
+questions the reports leave unanswered.
+{CITATION_NUMBER_RULE}
+- Attribute contested claims to whoever makes them. Do not adopt one \
+outlet's framing as your own."""
+
 _ANNOTATION_TASKS = {
     "terminology": (
         "Explain the terms, names and concepts in the passage that a reader "
@@ -536,6 +565,33 @@ class PromptBuilder:
             for n, (outlet, when, headline, summary) in enumerate(reports, start=1)
         )
         return Prompt(system=EVENT_SUMMARY_RULES, user=user)
+
+    def build_event_exploration_prompt(
+        self,
+        headline: str,
+        reports: list[tuple[str, str, str, str, str]],
+        passages: list[tuple[str, str, str]],
+        developing: bool = False,
+    ) -> Prompt:
+        """A prompt for the expanded event view. ``reports`` are (label,
+        outlet, date, headline, summary); ``passages`` are (label, citation,
+        text) of library passages."""
+        if not reports:
+            raise ValueError("An event needs at least one report.")
+        user = f"Event: {headline}\n\n"
+        if developing:
+            user += "The event is recent and may still be developing; say where the reports are provisional.\n\n"
+        user += "Reports:\n\n" + "\n\n".join(
+            f"{label} {outlet}, {when}\nHeadline: {title}\n{text or '(no summary in the feed)'}"
+            for label, outlet, when, title, text in reports
+        )
+        if passages:
+            user += "\n\nLibrary passages:\n\n" + "\n\n".join(
+                f"{label} {citation}\n{text}" for label, citation, text in passages
+            )
+        else:
+            user += "\n\nNo library passages were found for this event."
+        return Prompt(system=EVENT_EXPLORATION_RULES, user=user)
 
     @staticmethod
     def parse_annotation(text: str) -> tuple[str, list[str]]:
