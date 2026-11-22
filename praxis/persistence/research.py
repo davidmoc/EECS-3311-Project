@@ -23,10 +23,9 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from praxis.agent.corpus import Source
 from praxis.agent.response import ResponseStatus
-from praxis.documents import Citation, Passage
 from praxis.persistence.database import Database
+from praxis.persistence.sources import decode_source, encode_source
 from praxis.research.commands import COMMAND_KINDS, COMMAND_TYPES, ResearchCommand
 from praxis.research.plan import ResearchPlan
 from praxis.research.policy import StopReason
@@ -215,43 +214,6 @@ def _decode_session(data: dict[str, Any]) -> ResearchSession:
     )
 
 
-def _encode_source(source: Source) -> dict[str, Any]:
-    passage, citation = source.passage, source.citation
-    return {
-        "number": source.number,
-        "passage": {
-            "id": str(passage.id),
-            "document_id": str(passage.document_id),
-            "text": passage.text,
-            "locator": passage.locator,
-        },
-        "citation": {
-            "id": str(citation.id),
-            "document_id": str(citation.document_id),
-            "document_title": citation.document_title,
-            "author": citation.author,
-            "locator": citation.locator,
-            "quoted_text": citation.quoted_text,
-        },
-    }
-
-
-def _decode_source(data: dict[str, Any]) -> Source:
-    passage, citation = data["passage"], data["citation"]
-    return Source(
-        data["number"],
-        Passage(UUID(passage["id"]), UUID(passage["document_id"]), passage["text"], passage["locator"]),
-        Citation(
-            UUID(citation["document_id"]),
-            citation["document_title"],
-            citation["author"],
-            citation["locator"],
-            citation["quoted_text"],
-            UUID(citation["id"]),
-        ),
-    )
-
-
 def _encode_situation(situation: ConcreteSituation) -> dict[str, Any]:
     return {
         "topic": situation.topic,
@@ -304,7 +266,7 @@ def encode_result(result: ResearchResult) -> dict[str, Any]:
         "session": _encode_session(result.session),
         "status": result.status.value,
         "stop_reason": result.stop_reason.name if result.stop_reason else None,
-        "sources": [_encode_source(source) for source in result.sources],
+        "sources": [encode_source(source) for source in result.sources],
         "purposes": {str(n): purpose for n, purpose in result.purposes.items()},
         "summary": result.summary,
         "cited": [source.number for source in result.cited],
@@ -323,7 +285,7 @@ def decode_result(data: dict[str, Any]) -> ResearchResult:
     if data.get("version") != FORMAT_VERSION:
         raise ValueError(f"Unknown research record version {data.get('version')!r}.")
     session = _decode_session(data["session"])
-    sources = tuple(_decode_source(source) for source in data["sources"])
+    sources = tuple(decode_source(source) for source in data["sources"])
     by_number = {source.number: source for source in sources}
     plan = data["plan"]
     return ResearchResult(
