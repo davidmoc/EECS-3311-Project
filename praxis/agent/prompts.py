@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from praxis.agent.corpus import ResearchCorpus
+from praxis.agent.corpus import ResearchCorpus, Source
 from praxis.documents import AnnotationType, Document, Passage
 from praxis.llm import Prompt
 from praxis.reader_model import ExplanationDepth, ReaderProfile
@@ -17,6 +17,8 @@ MAX_SEARCH_TERMS = 8
 MAX_KNOWLEDGE_LINES = 12
 MAX_PLAN_STEPS = 4
 PLAN_STEP_KINDS = ("evidence", "theory", "history")
+# Compared sources are called Source A, Source B, ...
+_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 # "history: 1848 revolution, bourgeoisie", optionally bulleted or numbered.
 _PLAN_LINE = re.compile(
@@ -157,6 +159,44 @@ or the numbered passages and that the reader should check, add one line:
 {UNCERTAIN_PREFIX} <what could not be verified>
 Write no such line if there is nothing to flag.
 - Write plain paragraphs, no headings."""
+
+COMPARISON_RULES = f"""\
+You compare sources for readers of Praxis, a platform for studying politics, \
+history and Marxist theory from primary sources. The reader chose the \
+sources and will read the passages beside your comparison, so point them to \
+what to look at; do not summarise the sources for them.
+
+Compare how the sources treat the subject: shared ground; differences in \
+terminology, emphasis, framing, assumptions, omitted context, and the \
+evidence or authorities relied on; and factual claims on which they \
+contradict each other.
+
+Reply only with lines in these forms, one item per line:
+comparability: <comparable|partly comparable|not comparable> | <why>
+similarity: <what the sources share> [n, m]
+difference: <terminology|emphasis|framing|assumptions|omission|evidence> | <how the sources differ> [n, m]
+disagreement: <a factual claim on which the sources contradict each other> [n, m]
+observation: <your interpretation of one source's standpoint or framing> [n]
+{UNCERTAIN_PREFIX} <something the reader should check that the passages cannot settle>
+
+Rules:
+- Start with the comparability line. If the passages address substantially \
+different aspects of the subject, write "not comparable" and say why: a \
+direct comparison would mislead. Then write no other line except \
+{UNCERTAIN_PREFIX} lines.
+- Every similarity, difference and disagreement cites passages from at \
+least two different sources as [n]. Every observation cites the passages it \
+rests on. Leave out anything the passages do not support.
+{CITATION_NUMBER_RULE}
+- A disagreement is about facts (dates, events, figures, who did what). A \
+difference in how the same facts are described, weighed or explained is a \
+difference, not a disagreement.
+- Judgements about bias or a source's standpoint are observations: \
+interpretation, never stated as fact.
+- Use only the source details given. Do not state or guess who owns, funds \
+or employs a source unless those details say so.
+- Write at most 4 lines of each kind.
+- No other text."""
 
 _ANNOTATION_TASKS = {
     "terminology": (
@@ -433,6 +473,31 @@ class PromptBuilder:
             )
         else:
             user += "No other library passages were found for this annotation."
+        return Prompt(system=system, user=user.rstrip())
+
+    def build_comparison_prompt(
+        self,
+        subject: str,
+        sources: list[tuple[str, list[Source]]],
+        profile: ReaderProfile | None = None,
+    ) -> Prompt:
+        """A prompt asking the model to compare ``sources`` on ``subject``.
+
+        Each entry is a source's description (from its ``SourceProfile``)
+        and its passages, numbered across all sources.
+        """
+        if len(sources) < 2 or any(not passages for _, passages in sources):
+            raise ValueError("A comparison prompt needs passages from at least two sources.")
+        system = COMPARISON_RULES
+        context = reader_context(profile)
+        if context:
+            system += f"\n\nAbout the reader:\n{context}"
+        user = f"Compare the sources on: {subject}\n\n"
+        for letter, (description, passages) in zip(_LETTERS, sources):
+            user += f"### Source {letter}: {description}\n\n" + "\n\n".join(
+                f"{source.label} {source.citation.locator}\n{source.citation.quoted_text}"
+                for source in passages
+            ) + "\n\n"
         return Prompt(system=system, user=user.rstrip())
 
     @staticmethod
