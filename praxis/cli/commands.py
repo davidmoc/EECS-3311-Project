@@ -27,6 +27,7 @@ from praxis.reader_model import ExplanationDepth, KnowledgeLevel, ReaderProfile
 from praxis.reader_model.events import DocumentRead
 from praxis.research import ResearchBudget, ResearchError
 from praxis.research.result import ResearchResult
+from praxis.research.situation import ConcreteSituation
 from praxis.workspace import SavedItem, SavedItemKind
 
 app = typer.Typer(help="Praxis: Marxist political research and learning.", no_args_is_help=True)
@@ -157,7 +158,7 @@ def _print_warnings(warnings: tuple[str, ...], tokens_used: int) -> None:
 @app.command("research")
 def research(
     objective: Annotated[str, typer.Argument(help="Your research question, in quotes.")],
-    max_steps: Annotated[int, typer.Option(min=1, max=20, help="Most research steps to run.")] = ResearchBudget().max_iterations,
+    max_steps: Annotated[int, typer.Option(min=1, max=20, help="Most search steps to run (assessments are not counted).")] = ResearchBudget().max_iterations,
     max_tool_calls: Annotated[int, typer.Option(min=1, max=40, help="Most library searches to make.")] = ResearchBudget().max_tool_calls,
 ) -> None:
     """Research a question in several steps: plan, gather sources, then analyse them."""
@@ -171,6 +172,8 @@ def _print_research(result: ResearchResult) -> None:
     typer.secho("Research steps", bold=True)
     for number, step in enumerate(result.session.steps, start=1):
         mark = "✓" if step.succeeded else "✗"
+        if step.is_assessment:
+            mark += " ◆"
         detail = f"  +{len(step.new_sources)} sources" if step.new_sources else ""
         if step.retry_of is not None:
             detail += f"  (retry of step {step.retry_of + 1})"
@@ -182,6 +185,8 @@ def _print_research(result: ResearchResult) -> None:
     typer.echo()
 
     _print_sources(result.sources, result.cited, result.purposes)
+    if result.situation is not None and result.situation.has_findings:
+        _print_situation(result.situation)
     if result.status is ResponseStatus.ANSWERED and result.summary:
         _print_ai_text("Analysis", result.summary, result.personalized)
     if result.open_questions:
@@ -196,6 +201,28 @@ def _print_research(result: ResearchResult) -> None:
             typer.echo(f"  {str(reading.document_id)[:8]}  {reading.title} — {reading.author}")
         typer.echo()
     _print_warnings(result.warnings, result.session.tokens_used)
+
+
+def _print_situation(situation: ConcreteSituation) -> None:
+    """What the assessments established, each point with its sources."""
+
+    def marks(evidence: tuple[int, ...]) -> str:
+        return " [" + ", ".join(map(str, evidence)) + "]"
+
+    sections = [
+        ("Contradictions", [c.description + marks(c.evidence) for c in situation.contradictions]),
+        ("Material relations", [f"({r.relation_type.value}) {r.description}{marks(r.evidence)}"
+                                for r in situation.relations]),
+        ("Historical development", [d.description + marks(d.evidence) for d in situation.developments]),
+        ("Where the sources disagree", [c.description + marks(c.evidence) for c in situation.conflicts]),
+    ]
+    typer.secho("\nConcrete situation (AI-assessed; each point cites the sources above)", bold=True)
+    for title, lines in sections:
+        if lines:
+            typer.secho(f"  {title}", underline=True)
+            for line in lines:
+                typer.echo(textwrap.fill(line, width=86, initial_indent="  - ", subsequent_indent="    "))
+    typer.echo()
 
 
 # --- library (F05) -----------------------------------------------------------

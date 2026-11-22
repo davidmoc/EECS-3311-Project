@@ -87,3 +87,27 @@ def test_research_rejects_an_empty_question(run):
 
     assert result.exit_code == 1
     assert "Enter a research question first." in result.output
+
+
+def test_research_shows_assessments_and_the_concrete_situation(seeded, run, monkeypatch, cli_database):
+    use_llm(
+        monkeypatch, cli_database,
+        "history: revolution 1848 Germany",
+        "contradiction: bourgeoisie | proletariat | the bourgeoisie feared the workers [1]\n"
+        "conflict: The sources differ on who betrayed the revolution [1, 2]\n"
+        "search: theory | state power\n"
+        "verdict: more research needed",
+        "verdict: sufficient",
+        "## Findings\nThe bourgeoisie retreated [1].",
+    )
+
+    result = run("research", "Why did the 1848 revolution in Germany fail?")
+
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert "✓ ◆ Assess the research so far: 1 contradiction, 1 conflict between sources; 1 search added" in out
+    assert "Retrieve theory: state power" in out
+    assert "Concrete situation (AI-assessed; each point cites the sources above)" in out
+    assert "  - bourgeoisie vs proletariat: the bourgeoisie feared the workers [1]" in out
+    assert "Where the sources disagree" in out and "betrayed the revolution [1, 2]" in out
+    assert out.index("Sources") < out.index("Concrete situation") < out.index("Analysis (AI-generated)")
