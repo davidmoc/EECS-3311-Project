@@ -196,6 +196,7 @@ def test_an_empty_objective_is_rejected(library_database):
 @pytest.mark.parametrize("module", [
     "praxis.research.commands", "praxis.agent", "praxis.research.result",
     "praxis.persistence.research", "praxis.tools", "praxis.reading",
+    "praxis.comparison", "praxis.comparison.command", "praxis.persistence.comparisons",
 ])
 def test_packages_import_in_any_order(module):
     """praxis.agent and praxis.research depend on each other's modules; a

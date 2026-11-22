@@ -84,6 +84,17 @@ CREATE TABLE IF NOT EXISTS annotations (
 );
 CREATE INDEX IF NOT EXISTS annotations_by_passage ON annotations (passage_id);
 CREATE INDEX IF NOT EXISTS annotations_by_document ON annotations (document_id, paragraph);
+
+-- Source comparisons (F10). The whole comparison, with the compared
+-- passages, is in data (JSON); titles is a JSON list for the listing.
+CREATE TABLE IF NOT EXISTS comparisons (
+    id            TEXT PRIMARY KEY,
+    subject       TEXT NOT NULL,
+    titles        TEXT NOT NULL,
+    comparability TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    data          TEXT NOT NULL
+);
 """
 
 
