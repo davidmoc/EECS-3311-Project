@@ -14,6 +14,7 @@ class SavedItemKind(Enum):
     ANNOTATION = "annotation"
     EVENT = "event"
     RESEARCH = "research"
+    COMPARISON = "comparison"
     NOTE = "note"
 
 

@@ -95,3 +95,51 @@ def test_a_missing_paragraph_leaves_the_source_out(ids, run):
     assert result.exit_code == 0, result.output
     assert "there is no ¶99999" in result.output
     assert "Fewer than two of the chosen sources" in result.output
+
+
+def test_a_saved_comparison_can_be_reopened_from_the_list_and_workspace(ids, run, monkeypatch, cli_database):
+    manifesto, other = ids
+    use_llm(monkeypatch, cli_database, REPLY)
+    made = run("compare", f"{manifesto}:20-21", f"{other}:30,31", "--save", "-t", "state")
+    assert made.exit_code == 0, made.output
+    short = re.search(r"Comparison ([0-9a-f]{8})\.  Reopen: praxis comparisons show", made.output).group(1)
+    assert "Saved to your workspace" in made.output
+
+    listing = run("comparisons", "list").output
+    assert short in listing and "on the selected passages" in listing
+    assert "(partly comparable)" in listing
+
+    shown = run("comparisons", "show", short)
+    assert shown.exit_code == 0, shown.output
+    assert "Shared ground (AI-generated)" in shown.output
+    assert "[1] ¶20" in shown.output
+
+    items = run("workspace", "list", "--kind", "comparison").output
+    item_id = re.search(r"^([0-9a-f]{8})  \[comparison\] Comparison on the selected passages", items, re.MULTILINE).group(1)
+    opened = run("workspace", "open", item_id).output
+    assert "Shared ground (AI-generated):" in opened
+    assert f"→ praxis comparisons show {short}" in opened
+
+
+def test_comparisons_list_when_empty(run):
+    assert "No comparisons yet" in run("comparisons", "list").output
+
+
+def test_sessions_compare_compares_the_texts_behind_a_research_session(ids, run, monkeypatch, cli_database):
+    use_llm(
+        monkeypatch, cli_database,
+        "history: 1848 revolution Germany\ntheory: bourgeoisie proletariat",
+        "verdict: sufficient",
+        "## Findings\nThe bourgeoisie made peace with the monarchy [1].",
+        "comparability: comparable | both discuss 1848",
+    )
+    researched = run("research", "Why did the German revolution of 1848 fail?")
+    assert researched.exit_code == 0, researched.output
+    short = re.search(r"Research session ([0-9a-f]{8})\.", researched.output).group(1)
+
+    result = run("sessions", "compare", short)
+
+    assert result.exit_code == 0, result.output
+    assert "Comparing on: Why did the German revolution of 1848 fail?" in result.output
+    assert "Source A: " in result.output and "Source B: " in result.output
+    assert "Comparability (AI-assessed): comparable — both discuss 1848" in result.output

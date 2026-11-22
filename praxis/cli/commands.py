@@ -38,11 +38,13 @@ profile_app = typer.Typer(help="Inspect and correct your reader model (F13).", n
 workspace_app = typer.Typer(help="Save and return to texts, passages and notes (F15).", no_args_is_help=True)
 sessions_app = typer.Typer(help="Reopen and continue earlier research (F03).", no_args_is_help=True)
 annotations_app = typer.Typer(help="List and remove the AI annotations on a text (F06).", no_args_is_help=True)
+comparisons_app = typer.Typer(help="Reopen earlier source comparisons (F10).", no_args_is_help=True)
 app.add_typer(library_app, name="library")
 app.add_typer(profile_app, name="profile")
 app.add_typer(workspace_app, name="workspace")
 app.add_typer(sessions_app, name="sessions")
 app.add_typer(annotations_app, name="annotations")
+app.add_typer(comparisons_app, name="comparisons")
 
 # Tests replace this to run commands against an in-memory database.
 application_factory = build_application
@@ -306,6 +308,22 @@ def sessions_show(
     _print_continue_hint(result)
 
 
+@sessions_app.command("compare")
+def sessions_compare(
+    session_id: Annotated[str, typer.Argument(help="Session id or prefix.")],
+    save: Annotated[bool, typer.Option("--save", help="Save the comparison to your workspace.")] = False,
+    tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t", help="Tag for the saved comparison; repeatable.")] = None,
+) -> None:
+    """Compare how the texts behind a research session treat its question."""
+    with session() as application:
+        agent = application.agent
+        comparison = agent.compare_research_sources(agent.find_research(session_id))
+        saved = _save_comparison(application, comparison, save, tag)
+    _print_comparison(comparison)
+    _print_comparison_hint(comparison)
+    _print_saved(saved, save)
+
+
 @sessions_app.command("continue")
 def sessions_continue(
     session_id: Annotated[str, typer.Argument(help="Session id or prefix.")],
@@ -335,12 +353,62 @@ LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 def compare(
     sources: Annotated[list[str], typer.Argument(help="Two to four texts: an id or prefix, optionally with paragraphs, e.g. 3f2a91c0:12-14 or 3f2a91c0:5,9.")],
     on: Annotated[str, typer.Option("--on", help="What to compare them on, in quotes. Needed unless every source names paragraphs.")] = "",
+    save: Annotated[bool, typer.Option("--save", help="Save the comparison to your workspace.")] = False,
+    tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t", help="Tag for the saved comparison; repeatable.")] = None,
 ) -> None:
     """Compare how sources treat a subject: shared ground, framing, and factual disagreements."""
     with session() as application:
         chosen = [_parse_source(application, spec) for spec in sources]
         comparison = application.agent.compare_sources(chosen, on)
+        saved = _save_comparison(application, comparison, save, tag)
     _print_comparison(comparison)
+    _print_comparison_hint(comparison)
+    _print_saved(saved, save)
+
+
+def _save_comparison(
+    application: Application, comparison: SourceComparison, save: bool, tag: list[str] | None
+) -> SavedItem | None:
+    if save and len(comparison.profiles) >= 2:
+        return application.workspace.save_comparison(comparison, tags=tuple(tag or ()))
+    return None
+
+
+def _print_comparison_hint(comparison: SourceComparison) -> None:
+    if len(comparison.profiles) < 2 or any(w.startswith("The comparison could not be stored") for w in comparison.warnings):
+        return
+    typer.echo(f"Comparison {str(comparison.id)[:8]}.  Reopen: praxis comparisons show {str(comparison.id)[:8]}")
+
+
+@comparisons_app.command("list")
+def comparisons_list(
+    limit: Annotated[int, typer.Option(min=1, max=200, help="How many comparisons to show.")] = 20,
+) -> None:
+    """List stored comparisons, newest first."""
+    with session() as application:
+        summaries = application.agent.list_comparisons(limit)
+    if not summaries:
+        typer.echo('No comparisons yet. Start with: praxis compare <id> <id> --on "subject"')
+        return
+    for summary in summaries:
+        when = summary.created_at.astimezone().strftime("%Y-%m-%d %H:%M")
+        typer.echo(f"{str(summary.id)[:8]}  {when}  on {summary.subject}")
+        typer.echo(f"          {' / '.join(summary.titles)} ({summary.comparability.value})")
+
+
+@comparisons_app.command("show")
+def comparisons_show(
+    comparison_id: Annotated[str, typer.Argument(help="Comparison id or prefix.")],
+    save: Annotated[bool, typer.Option("--save", help="Save the comparison to your workspace.")] = False,
+    tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t", help="Tag for the saved comparison; repeatable.")] = None,
+) -> None:
+    """Show a stored comparison as it was made."""
+    with session() as application:
+        agent = application.agent
+        comparison = agent.get_comparison(agent.find_comparison(comparison_id))
+        saved = _save_comparison(application, comparison, save, tag)
+    _print_comparison(comparison)
+    _print_saved(saved, save)
 
 
 def _parse_source(application: Application, spec: str) -> SourceSelection:
@@ -824,6 +892,7 @@ def workspace_open(item_id: Annotated[str, typer.Argument(help="Item id or prefi
     with session() as application:
         item = application.workspace.get_item(item_id)
         research_id = application.workspace.research_session_of(item)
+        comparison_id = application.workspace.comparison_of(item)
         document_id = application.workspace.document_id_of(item)
         paragraph = application.workspace.paragraph_of(item)
         still_available = False
@@ -842,6 +911,8 @@ def workspace_open(item_id: Annotated[str, typer.Argument(help="Item id or prefi
         typer.echo(textwrap.fill(item.content, width=88))
     if item.note:
         typer.echo(f"\nNote: {item.note}")
+    if comparison_id is not None:
+        typer.echo(f"\n→ praxis comparisons show {str(comparison_id)[:8]}")
     if research_id is not None:
         short = str(research_id)[:8]
         typer.echo(f"\n→ praxis sessions show {short}")

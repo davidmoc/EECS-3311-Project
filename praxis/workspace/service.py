@@ -11,6 +11,7 @@ from datetime import datetime
 from uuid import UUID
 
 from praxis.agent import AgentResponse
+from praxis.comparison import SourceComparison
 from praxis.research.result import ResearchResult
 from praxis.documents import Document, Passage
 from praxis.persistence import WorkspaceRepository
@@ -18,6 +19,7 @@ from praxis.workspace.models import SavedItem, SavedItemKind, Workspace
 
 Clock = Callable[[], datetime]
 RESEARCH_REFERENCE = "research:"
+COMPARISON_REFERENCE = "comparison:"
 
 
 class WorkspaceError(ValueError):
@@ -105,6 +107,24 @@ class WorkspaceService:
             )
         )
 
+    def save_comparison(
+        self, comparison: SourceComparison, note: str = "", tags: tuple[str, ...] = ()
+    ) -> SavedItem:
+        """Save a source comparison with a snapshot of its points and
+        passages. The item refers to the stored comparison."""
+        titles = " / ".join(p.title for p in comparison.profiles)
+        return self.save_item(
+            SavedItem(
+                kind=SavedItemKind.COMPARISON,
+                title=f"Comparison on {comparison.subject}: {titles}",
+                reference=f"{COMPARISON_REFERENCE}{comparison.id}",
+                content=render_comparison(comparison),
+                note=note,
+                tags=tags,
+                saved_at=self._clock(),
+            )
+        )
+
     def add_note(self, title: str, text: str = "", tags: tuple[str, ...] = ()) -> SavedItem:
         return self.save_item(
             SavedItem(SavedItemKind.NOTE, title, content=text, tags=tags, saved_at=self._clock())
@@ -154,6 +174,16 @@ class WorkspaceService:
             return None
 
     @staticmethod
+    def comparison_of(item: SavedItem) -> UUID | None:
+        """The stored comparison a saved comparison came from, if any."""
+        if item.kind is not SavedItemKind.COMPARISON or not item.reference.startswith(COMPARISON_REFERENCE):
+            return None
+        try:
+            return UUID(item.reference[len(COMPARISON_REFERENCE):])
+        except ValueError:
+            return None
+
+    @staticmethod
     def paragraph_of(item: SavedItem) -> int | None:
         """For a saved passage, its paragraph number (from the ``¶n`` locator)."""
         if item.kind is not SavedItemKind.PASSAGE or "#¶" not in item.reference:
@@ -198,4 +228,38 @@ def render_research(result: ResearchResult) -> str:
             )
         )
     parts.extend(f"Note: {warning}" for warning in result.warnings)
+    return "\n\n".join(parts)
+
+
+def render_comparison(comparison: SourceComparison) -> str:
+    """Plain-text snapshot of a comparison: the AI's points under their
+    headings, then each source with its passages."""
+    letters = {p.document_id: chr(ord("A") + i) for i, p in enumerate(comparison.profiles)}
+    parts = []
+    if comparison.has_analysis:
+        parts.append(
+            f"Comparability (AI-assessed): {comparison.comparability.value}"
+            + (f" — {comparison.comparability_note}" if comparison.comparability_note else "")
+        )
+    for title, points in (
+        ("Shared ground (AI-generated)", comparison.similarities),
+        ("Differences (AI-generated)", comparison.differences),
+        ("Factual disagreements (AI-generated)", comparison.disagreements),
+        ("Observations on framing (AI interpretation)", comparison.observations),
+    ):
+        if points:
+            parts.append(f"{title}:\n" + "\n".join(
+                f"- {p.aspect + ': ' if p.aspect else ''}{p.description} "
+                f"[{', '.join(map(str, p.evidence))}]"
+                for p in points
+            ))
+    for profile in comparison.profiles:
+        parts.append(
+            f"Source {letters[profile.document_id]}: {profile.describe()}\n"
+            + "\n\n".join(
+                f"{s.label} {s.citation.locator}\n{s.citation.quoted_text}"
+                for s in comparison.passages_of(profile)
+            )
+        )
+    parts.extend(f"Note: {warning}" for warning in comparison.warnings)
     return "\n\n".join(parts)
