@@ -188,9 +188,11 @@ direct comparison would mislead. Then write no other line except \
 least two different sources as [n]. Every observation cites the passages it \
 rests on. Leave out anything the passages do not support.
 {CITATION_NUMBER_RULE}
-- A disagreement is about facts (dates, events, figures, who did what). A \
-difference in how the same facts are described, weighed or explained is a \
-difference, not a disagreement.
+- A disagreement is about facts (dates, events, figures, who did what): \
+the sources make incompatible claims about the same place, time and \
+people. Claims about different countries, periods or groups do not \
+disagree. A difference in how the same facts are described, defined, \
+weighed or explained is a difference, not a disagreement.
 - Judgements about bias or a source's standpoint are observations: \
 interpretation, never stated as fact.
 - Use only the source details given. Do not state or guess who owns, funds \

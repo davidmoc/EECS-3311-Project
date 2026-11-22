@@ -41,6 +41,8 @@ def test_rules_separate_facts_framing_and_interpretation(sources):
     system = PromptBuilder().build_comparison_prompt("the state", sources).system
     assert "comparability: <comparable|partly comparable|not comparable>" in system
     assert "A disagreement is about facts" in system
+    # Live run: France and Austria were reported as a factual disagreement.
+    assert "Claims about different countries, periods or groups do not" in system
     assert "interpretation, never stated as fact" in system
     assert "Do not state or guess who owns, funds" in system
     assert CITATION_NUMBER_RULE in system
