@@ -21,6 +21,7 @@ import typer
 
 from praxis.agent import AgentError, AgentResponse, ResponseStatus, Source
 from praxis.app import Application, build_application, bundled_library_service
+from praxis.comparison import Comparability, SourceComparison, SourceSelection
 from praxis.documents import Annotation, AnnotationType, Document
 from praxis.library import LibraryError, SourceReference
 from praxis.reader_model import ExplanationDepth, KnowledgeLevel, ReaderProfile
@@ -323,6 +324,94 @@ def sessions_continue(
     _print_research(result)
     _print_continue_hint(result)
     _print_saved(saved, save)
+
+
+# --- source comparison (F10) -------------------------------------------------
+
+LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+@app.command("compare")
+def compare(
+    sources: Annotated[list[str], typer.Argument(help="Two to four texts: an id or prefix, optionally with paragraphs, e.g. 3f2a91c0:12-14 or 3f2a91c0:5,9.")],
+    on: Annotated[str, typer.Option("--on", help="What to compare them on, in quotes. Needed unless every source names paragraphs.")] = "",
+) -> None:
+    """Compare how sources treat a subject: shared ground, framing, and factual disagreements."""
+    with session() as application:
+        chosen = [_parse_source(application, spec) for spec in sources]
+        comparison = application.agent.compare_sources(chosen, on)
+    _print_comparison(comparison)
+
+
+def _parse_source(application: Application, spec: str) -> SourceSelection:
+    """``3f2a91c0``, ``3f2a91c0:12``, ``3f2a91c0:12-14`` or ``3f2a91c0:5,9``."""
+    document_id, _, paragraphs = spec.partition(":")
+    document = application.library.get_document(document_id)
+    numbers: list[int] = []
+    for part in filter(None, (p.strip() for p in paragraphs.split(","))):
+        first, _, last = part.lstrip("¶").partition("-")
+        if not first.isdigit() or (last and not last.isdigit()):
+            raise ValueError(f"'{spec}': paragraphs are written like 12, 12-14 or 5,9.")
+        low, high = int(first), int(last or first)
+        if high < low:
+            raise ValueError(f"'{spec}': the range {part} runs backwards.")
+        numbers.extend(range(low, high + 1))
+    return SourceSelection.of(document, tuple(numbers))
+
+
+def _print_comparison(comparison: SourceComparison) -> None:
+    typer.secho(f"Comparing on: {comparison.subject}", bold=True)
+    letters = {p.document_id: LETTERS[i] for i, p in enumerate(comparison.profiles)}
+    for profile in comparison.profiles:
+        typer.secho(f"\nSource {letters[profile.document_id]}: {profile.describe()}", bold=True)
+        if profile.source_url:
+            typer.echo(f"  {profile.source_url}")
+        for source in comparison.passages_of(profile):
+            typer.secho(f"  {source.label} {source.citation.locator}", fg=typer.colors.CYAN)
+            text = source.citation.quoted_text
+            if len(text) > SHOWN_PASSAGE_CHARS:
+                text = text[:SHOWN_PASSAGE_CHARS].rstrip() + " […]"
+            typer.echo(textwrap.indent(textwrap.fill(text, width=84), "    "))
+            paragraph = source.citation.locator.lstrip("¶")
+            typer.echo(f"    → praxis library read {str(profile.document_id)[:8]} --start {paragraph}")
+
+    if comparison.comparability is not Comparability.UNKNOWN:
+        note = f" — {comparison.comparability_note}" if comparison.comparability_note else ""
+        typer.secho(f"\nComparability (AI-assessed): {comparison.comparability.value}{note}", bold=True)
+
+    def marks(evidence: tuple[int, ...]) -> str:
+        """``[1, 3] (sources A, B)``: the passages, and whose they are."""
+        owners = dict.fromkeys(letters.get(_document_of(comparison, n), "?") for n in evidence)
+        plural = "s" if len(owners) > 1 else ""
+        return f" [{', '.join(map(str, evidence))}] (source{plural} {', '.join(owners)})"
+
+    sections = [
+        ("Shared ground (AI-generated)", comparison.similarities),
+        ("Differences in treatment (AI-generated)", comparison.differences),
+        ("Factual disagreements (AI-generated; check the passages)", comparison.disagreements),
+        ("Observations on framing (AI interpretation, not established fact)", comparison.observations),
+    ]
+    for title, points in sections:
+        if not points:
+            continue
+        typer.secho(f"\n{title}", bold=True)
+        for point in points:
+            aspect = f"{point.aspect}: " if point.aspect else ""
+            typer.echo(textwrap.fill(
+                aspect + point.description + marks(point.evidence),
+                width=86, initial_indent="  - ", subsequent_indent="    ",
+            ))
+    if comparison.uncertainties:
+        typer.secho("\nCould not be verified from these passages", fg=typer.colors.YELLOW)
+        for note in comparison.uncertainties:
+            typer.secho(textwrap.fill(note, width=86, initial_indent="  - ", subsequent_indent="    "), fg=typer.colors.YELLOW)
+    typer.echo()
+    _print_warnings(comparison.warnings, comparison.tokens_used)
+
+
+def _document_of(comparison: SourceComparison, number: int):
+    profile = comparison.source_of(number)
+    return profile.document_id if profile else None
 
 
 # --- library (F05) -----------------------------------------------------------
