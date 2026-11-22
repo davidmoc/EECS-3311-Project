@@ -32,6 +32,8 @@ _LINE = re.compile(r"^\s*(?:[-*•]|\d+[.)])?\s*\**\s*([a-z]+)\s*\**\s*:\s*(.+?)
 
 _KINDS = {"relation", "contradiction", "development", "conflict", "search", "question", "verdict"}
 
+_CONNECTIVES = {"vs", "vs.", "versus", "and", "&", "/", "-"}
+
 ASSESSMENT_FAILED = "The research could not be assessed ({}), so the plan was not revised."
 ASSESSMENT_UNREADABLE = (
     "The research assessment could not be read, so the plan was not revised."
@@ -101,7 +103,9 @@ def parse_assessment(text: str) -> ResearchAssessment | None:
         kind, rest = match.group(1).lower(), match.group(2)
         evidence = tuple(cited_numbers(rest))
         fields = [_clean(part) for part in CITATION_MARK.sub("", rest).split("|")]
-        fields = [f for f in fields if f]
+        # "conflict: [1] vs [4] | ..." leaves a field of just "vs" once the
+        # citation marks are removed.
+        fields = [f for f in fields if f and f.lower() not in _CONNECTIVES]
         if not fields:
             continue
 

@@ -141,3 +141,13 @@ def test_nothing_to_assess_without_a_model_or_sources():
     empty = ResearchContext(ResearchSession("x"), ToolManager(), corpus=ResearchCorpus())
     assert DialecticalMaterialistResearchMethod(None).assess(ConcreteSituation("x"), context_with_sources()) is None
     assert DialecticalMaterialistResearchMethod(ScriptedLLM()).assess(ConcreteSituation("x"), empty) is None
+
+
+def test_citation_marks_used_as_the_sides_of_a_conflict_leave_no_residue():
+    """Found in a live run: "conflict: [1] vs [10] | ..." was shown as
+    "vs | Passage depicts ..."."""
+    assessment = parse_assessment("conflict: [1] vs [10] | Passage depicts mass readiness to arm")
+
+    (conflict,) = assessment.conflicting_evidence
+    assert conflict.description == "Passage depicts mass readiness to arm"
+    assert conflict.evidence == (1, 10)
