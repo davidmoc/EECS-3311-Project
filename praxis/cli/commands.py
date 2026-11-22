@@ -34,9 +34,11 @@ app = typer.Typer(help="Praxis: Marxist political research and learning.", no_ar
 library_app = typer.Typer(help="Browse, search and read the text library (F05).", no_args_is_help=True)
 profile_app = typer.Typer(help="Inspect and correct your reader model (F13).", no_args_is_help=True)
 workspace_app = typer.Typer(help="Save and return to texts, passages and notes (F15).", no_args_is_help=True)
+sessions_app = typer.Typer(help="Reopen and continue earlier research (F03).", no_args_is_help=True)
 app.add_typer(library_app, name="library")
 app.add_typer(profile_app, name="profile")
 app.add_typer(workspace_app, name="workspace")
+app.add_typer(sessions_app, name="sessions")
 
 # Tests replace this to run commands against an in-memory database.
 application_factory = build_application
@@ -155,22 +157,43 @@ def _print_warnings(warnings: tuple[str, ...], tokens_used: int) -> None:
 # --- research (F03) ----------------------------------------------------------
 
 
+MaxSteps = Annotated[int, typer.Option(min=1, max=20, help="Most search steps to run (assessments are not counted).")]
+MaxToolCalls = Annotated[int, typer.Option(min=1, max=40, help="Most library searches to make.")]
+
+
 @app.command("research")
 def research(
     objective: Annotated[str, typer.Argument(help="Your research question, in quotes.")],
-    max_steps: Annotated[int, typer.Option(min=1, max=20, help="Most search steps to run (assessments are not counted).")] = ResearchBudget().max_iterations,
-    max_tool_calls: Annotated[int, typer.Option(min=1, max=40, help="Most library searches to make.")] = ResearchBudget().max_tool_calls,
+    max_steps: MaxSteps = ResearchBudget().max_iterations,
+    max_tool_calls: MaxToolCalls = ResearchBudget().max_tool_calls,
 ) -> None:
     """Research a question in several steps: plan, gather sources, then analyse them."""
     budget = ResearchBudget(max_iterations=max_steps, max_tool_calls=max_tool_calls)
     with session() as application:
         result = application.agent.research(objective, budget)
     _print_research(result)
+    _print_continue_hint(result)
+
+
+def _print_continue_hint(result: ResearchResult) -> None:
+    short = str(result.session.id)[:8]
+    if any(w.startswith("The research could not be saved") for w in result.warnings):
+        return
+    typer.echo(f"Research session {short}.")
+    if result.unfinished_steps:
+        typer.echo(f"  Run the remaining steps:  praxis sessions continue {short}")
+    typer.echo(f'  Follow up:                praxis sessions continue {short} --focus "..."')
 
 
 def _print_research(result: ResearchResult) -> None:
     typer.secho("Research steps", bold=True)
+    rounds = result.session.rounds
+    shown_round = 0
     for number, step in enumerate(result.session.steps, start=1):
+        if rounds > 1 and step.round != shown_round:
+            shown_round = step.round
+            focus = result.session.focuses.get(step.round)
+            typer.secho(f"  Round {step.round}" + (f": {focus}" if focus else ""), underline=True)
         mark = "✓" if step.succeeded else "✗"
         if step.is_assessment:
             mark += " ◆"
@@ -223,6 +246,57 @@ def _print_situation(situation: ConcreteSituation) -> None:
             for line in lines:
                 typer.echo(textwrap.fill(line, width=86, initial_indent="  - ", subsequent_indent="    "))
     typer.echo()
+
+
+# --- research sessions (F03, UC15) ------------------------------------------
+
+
+@sessions_app.command("list")
+def sessions_list(
+    limit: Annotated[int, typer.Option(min=1, max=200, help="How many sessions to show.")] = 20,
+) -> None:
+    """List stored research sessions, most recent first."""
+    with session() as application:
+        summaries = application.agent.list_research(limit)
+    if not summaries:
+        typer.echo('No research yet. Start with: praxis research "your question"')
+        return
+    for summary in summaries:
+        state = "incomplete" if summary.incomplete else "complete"
+        rounds = f", {summary.rounds} rounds" if summary.rounds > 1 else ""
+        when = summary.updated_at.astimezone().strftime("%Y-%m-%d %H:%M")
+        typer.echo(f"{str(summary.id)[:8]}  {when}  {summary.objective}")
+        typer.echo(f"          {state}, {summary.source_count} sources{rounds}")
+
+
+@sessions_app.command("show")
+def sessions_show(
+    session_id: Annotated[str, typer.Argument(help="Session id or prefix.")],
+) -> None:
+    """Show a stored research session as it was last left."""
+    with session() as application:
+        agent = application.agent
+        result = agent.get_research(agent.find_research(session_id))
+    if result.is_incomplete:
+        typer.secho("This research is incomplete.", fg=typer.colors.YELLOW)
+    _print_research(result)
+    _print_continue_hint(result)
+
+
+@sessions_app.command("continue")
+def sessions_continue(
+    session_id: Annotated[str, typer.Argument(help="Session id or prefix.")],
+    focus: Annotated[Optional[str], typer.Option("--focus", "-f", help="What to follow up on, in quotes.")] = None,
+    max_steps: MaxSteps = ResearchBudget().max_iterations,
+    max_tool_calls: MaxToolCalls = ResearchBudget().max_tool_calls,
+) -> None:
+    """Run another round of earlier research: a new direction, or the steps left unrun."""
+    budget = ResearchBudget(max_iterations=max_steps, max_tool_calls=max_tool_calls)
+    with session() as application:
+        agent = application.agent
+        result = agent.continue_research(agent.find_research(session_id), focus, budget)
+    _print_research(result)
+    _print_continue_hint(result)
 
 
 # --- library (F05) -----------------------------------------------------------

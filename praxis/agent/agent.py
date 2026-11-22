@@ -27,7 +27,7 @@ from praxis.research.situation import ConcreteSituation, ConcreteSituationBuilde
 from praxis.tools import ToolManager
 
 if TYPE_CHECKING:  # only for type hints: praxis.tools imports praxis.persistence
-    from praxis.persistence.research import ResearchRepository
+    from praxis.persistence.research import ResearchRepository, ResearchSessionSummary
 
 PASSAGES_PER_QUESTION = 6
 # How many more sources one continuation of a research session may add.
@@ -154,6 +154,10 @@ class PoliticalResearchAgent:
         if result is None:
             raise AgentError(f"There is no research session {session_id}.")
         return result
+
+    def list_research(self, limit: int = 20) -> list[ResearchSessionSummary]:
+        """Stored research sessions, most recently updated first."""
+        return self._require_repository().list_recent(limit)
 
     def find_research(self, id_prefix: str) -> UUID:
         """The stored session whose id starts with ``id_prefix``."""

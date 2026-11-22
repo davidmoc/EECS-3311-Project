@@ -79,8 +79,8 @@ class ResearchSession:
     rounds: int = 1
     round_started_at: datetime | None = None
     round_base: tuple[int, int, int] = (0, 0, 0)  # iterations, tool calls, model calls
-    # Directions the reader gave when continuing, in order.
-    focuses: list[str] = field(default_factory=list)
+    # Round number -> the direction the reader gave for that round.
+    focuses: dict[int, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.objective = " ".join(self.objective.split())
@@ -103,12 +103,12 @@ class ResearchSession:
         self.tokens_used += tokens
 
     def add_focus(self, focus: str) -> str:
-        """Record a direction the reader gave for this round."""
+        """Record the direction the reader gave for this round."""
         self._require_running()
         focus = " ".join(focus.split())
         if not focus:
             raise ResearchError("A follow-up direction cannot be empty.")
-        self.focuses.append(focus)
+        self.focuses[self.rounds] = focus
         return focus
 
     @property
@@ -117,7 +117,7 @@ class ResearchSession:
         read it when assessing and writing up the research."""
         if not self.focuses:
             return self.objective
-        follow_ups = "\n".join(f"- {focus}" for focus in self.focuses)
+        follow_ups = "\n".join(f"- {focus}" for focus in self.focuses.values())
         return f"{self.objective}\nFollow-up directions from the reader:\n{follow_ups}"
 
     def add_warning(self, warning: str) -> None:

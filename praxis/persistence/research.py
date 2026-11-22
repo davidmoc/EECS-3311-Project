@@ -179,7 +179,7 @@ def _encode_session(session: ResearchSession) -> dict[str, Any]:
         "rounds": session.rounds,
         "round_started_at": _time(session.round_started_at),
         "round_base": list(session.round_base),
-        "focuses": list(session.focuses),
+        "focuses": {str(n): focus for n, focus in session.focuses.items()},
     }
 
 
@@ -211,7 +211,7 @@ def _decode_session(data: dict[str, Any]) -> ResearchSession:
         rounds=data["rounds"],
         round_started_at=_parse_time(data["round_started_at"]),
         round_base=tuple(data["round_base"]),
-        focuses=list(data["focuses"]),
+        focuses={int(n): focus for n, focus in data["focuses"].items()},
     )
 
 

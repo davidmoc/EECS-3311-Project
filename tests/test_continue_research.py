@@ -54,7 +54,7 @@ def test_continuing_with_a_focus_keeps_earlier_sources_and_adds_new_ones(library
     session = second.session
     assert session.id == first.session.id and session.rounds == 2
     assert session.status is ResearchStatus.COMPLETED
-    assert session.focuses == [FOCUS]
+    assert session.focuses == {2: FOCUS}
     # Earlier sources keep their numbers; the round adds after them.
     assert second.sources[: len(first.sources)] == first.sources
     assert len(second.sources) > len(first.sources)
