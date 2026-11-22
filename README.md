@@ -7,8 +7,8 @@ theory through a Marxist analytical framework. The Stage 1 design is in
 > **Status:** Stage 2 implementation in progress. Working now through the
 > CLI: the multi-step research agent (F03), source-first question
 > answering (F04), the reading library (F05), AI-annotated reading (F06),
-> source and framing comparison (F10), the reader model (F13) and the
-> workspace (F15). The news dashboard and GUI are not built yet.
+> source and framing comparison (F10), the reader model (F13), the
+> workspace (F15) and the news dashboard (F01). The GUI is not built yet.
 
 ## Prerequisites
 
@@ -77,7 +77,9 @@ python -m praxis library read abdc2552 --start 259 --count 1 --annotations
 python -m praxis annotations list abdc2552
 python -m praxis annotations remove 1a3c3cde        # id shown in brackets
 
-# News (F01): headlines and summaries from the feeds in data/news/feeds.json
+# News dashboard (F01): current events from the feeds in data/news/feeds.json
+python -m praxis news dashboard               # fetch, group into events, summarise
+python -m praxis news dashboard --offline --limit 12   # from stored news only
 python -m praxis news refresh                 # fetch and keep (needs network)
 python -m praxis news list --days 2
 python -m praxis news list --outlet guardian
@@ -166,6 +168,19 @@ read, and stored news stays available offline. News is kept out of
 `library browse` and `library search`, but `ask`, `research` and
 `compare` can draw on it.
 
+`news dashboard` refreshes the feeds (unless `--offline`), then groups the
+last two days' reports into events without a model: reports whose
+headlines and opening words share rare words (names, places) are grouped
+if they are at most two days apart. Events covered by most outlets come
+first. For each event with two or more reports, the model writes a
+neutral title, a two- or three-sentence summary citing the reports as
+`[n]`, and categories, and says whether the reports are really about one
+event. A summary that cites no report, or a report that does not exist,
+is not shown: the card lists the headlines instead. A single report is
+marked as such and shows the outlet's own summary. Weakly grouped events
+are marked "grouping uncertain". Cards are stored, so an unchanged event
+is not summarised again.
+
 Reading with `library read` updates your reading progress, interests and
 inferred knowledge automatically; `profile know` always overrides inference.
 
@@ -189,7 +204,7 @@ API key and no network access.
 | `praxis/config.py` | Local settings and API-key handling |
 | `praxis/documents/` | Documents, passages, citations, annotations |
 | `praxis/library/` | `LibraryService`, `DocumentProvider`, Gutenberg adapter |
-| `praxis/news/` | `NewsProvider`, `RSSNewsAdapter`, `NewsService` (F01) |
+| `praxis/news/` | `NewsProvider`, `RSSNewsAdapter`, `NewsService`, `EventClusterer`, `NewsSummaryService`, `Event` (F01) |
 | `praxis/llm/` | `LLMClient` interface and the OpenAI adapter |
 | `praxis/persistence/` | SQLite database and repositories |
 | `praxis/research/` | Research session, commands, plan, planner, concrete situation, assessment method, stopping policy |
