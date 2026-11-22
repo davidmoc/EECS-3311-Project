@@ -8,7 +8,8 @@ theory through a Marxist analytical framework. The Stage 1 design is in
 > CLI: the multi-step research agent (F03), source-first question
 > answering (F04), the reading library (F05), AI-annotated reading (F06),
 > source and framing comparison (F10), the reader model (F13), the
-> workspace (F15) and the news dashboard (F01). The GUI is not built yet.
+> workspace (F15), the news dashboard (F01) and event exploration (F02).
+> The GUI is not built yet.
 
 ## Prerequisites
 
@@ -80,6 +81,10 @@ python -m praxis annotations remove 1a3c3cde        # id shown in brackets
 # News dashboard (F01): current events from the feeds in data/news/feeds.json
 python -m praxis news dashboard               # fetch, group into events, summarise
 python -m praxis news dashboard --offline --limit 12   # from stored news only
+python -m praxis news event e19d03b8          # open an event (F02): id from the dashboard
+python -m praxis news event e19d03b8 --compare   # how the outlets cover it (F10)
+python -m praxis news event e19d03b8 --research  # research it, starting from its reports
+python -m praxis news event e19d03b8 --save -t libya
 python -m praxis news refresh                 # fetch and keep (needs network)
 python -m praxis news list --days 2
 python -m praxis news list --outlet guardian
@@ -180,6 +185,18 @@ is not shown: the card lists the headlines instead. A single report is
 marked as such and shows the outlet's own summary. Weakly grouped events
 are marked "grouping uncertain". Cards are stored, so an unchanged event
 is not summarised again.
+
+`news event` opens one event (F02). It shows the reports with their
+links, library passages that may give background (found with the
+model's keywords), and other stored reports from around the same days
+that resemble it but were not grouped with it. The model then writes an
+account citing the reports: what happened, where the reports differ (each
+account is set out, not resolved), background from the library
+(presented as interpretation), and open questions. An event whose latest
+report is from today or yesterday is marked as still developing.
+`--compare` compares one report per outlet with `compare`'s method.
+`--research` starts a research session whose first sources are the
+event's reports. `--save` keeps the event in the workspace.
 
 Reading with `library read` updates your reading progress, interests and
 inferred knowledge automatically; `profile know` always overrides inference.
