@@ -177,6 +177,10 @@ ACCOUNT = (
     "## Background from the library\nNone of the passages bears on it.\n\n"
     "## Open questions\n- What caused the fire?\n"
 )
+LIST_ACCOUNT = (
+    "## What happened\n- Three workers died [1].\n- Dozens are missing [2].\n\n"
+    "## Open questions\n- What caused the fire?\n"
+)
 
 
 def event_id_from(output):
@@ -238,3 +242,11 @@ def test_unknown_event_is_an_error(run):
     result = run("news", "event", "abcdef12")
     assert result.exit_code == 1
     assert "No event with id starting 'abcdef12'" in result.output
+
+
+def test_list_items_in_the_account_stay_on_their_own_lines(run, monkeypatch, cli_database):
+    """Live run: the account's "- " items were run together into one paragraph."""
+    use_news(monkeypatch, cli_database, ScriptedLLM(CARD, "fire", LIST_ACCOUNT), StaticProvider("Wires", *FIRE))
+    short = event_id_from(run("news", "dashboard").output)
+    out = run("news", "event", short).output
+    assert "\n- Three workers died [1].\n- Dozens are missing [2].\n" in out

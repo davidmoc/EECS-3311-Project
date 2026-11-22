@@ -126,10 +126,11 @@ def _print_sources(
     sources: tuple[Source, ...],
     cited: tuple[Source, ...],
     purposes: dict[int, str] | None = None,
+    heading: str = "Sources",
 ) -> None:
     cited_numbers = {source.number for source in cited}
     if sources:
-        typer.secho("Sources", bold=True)
+        typer.secho(heading, bold=True)
     for source in sources:
         marker = f"  ({purposes[source.number]})" if purposes and source.number in purposes else ""
         marker += "  (cited)" if source.number in cited_numbers else ""
@@ -155,8 +156,21 @@ def _print_ai_text(title: str, text: str, personalized: bool) -> None:
             typer.secho(heading.lstrip("# ").strip(), underline=True)
             paragraph = rest
         if paragraph.strip():
-            typer.echo(textwrap.fill(paragraph, width=88))
+            for line in _wrap_keeping_lists(paragraph, 88):
+                typer.echo(line)
         typer.echo()
+
+
+def _wrap_keeping_lists(paragraph: str, width: int) -> list[str]:
+    """Wrap ``paragraph``; a "- " list keeps one item per line."""
+    lines = paragraph.splitlines()
+    if not any(line.lstrip()[:2] in {"- ", "* ", "• "} for line in lines):
+        return textwrap.wrap(paragraph, width=width)
+    wrapped: list[str] = []
+    for line in lines:
+        bullet = line.lstrip()[:2] in {"- ", "* ", "• "}
+        wrapped.extend(textwrap.wrap(line.strip(), width=width, subsequent_indent="  " if bullet else ""))
+    return wrapped
 
 
 def _print_warnings(warnings: tuple[str, ...], tokens_used: int) -> None:
@@ -614,12 +628,13 @@ def _print_expanded_event(expanded: ExpandedEvent) -> None:
         when = report.publication_date.isoformat() if report.publication_date else "undated"
         typer.secho(f"\n{source.label} {report.outlet}, {when}: {report.title}", fg=typer.colors.CYAN)
         if source.citation.quoted_text != report.title:
-            typer.echo(textwrap.indent(textwrap.fill(source.citation.quoted_text, width=84), "    "))
+            for paragraph in source.citation.quoted_text.split("\n\n"):
+                typer.echo(textwrap.indent(textwrap.fill(paragraph, width=84), "    "))
         typer.echo(f"    {report.source_url}")
         typer.echo(f"    → praxis library read {_short_id(report)}")
     if expanded.library_sources:
-        typer.secho("\nBackground passages from the library", bold=True)
-        _print_sources(expanded.library_sources, expanded.cited)
+        typer.echo()
+        _print_sources(expanded.library_sources, expanded.cited, heading="Background passages from the library")
 
     if expanded.account:
         _print_ai_text("Account of the event", expanded.account, False)
@@ -629,7 +644,7 @@ def _print_expanded_event(expanded: ExpandedEvent) -> None:
             typer.echo(textwrap.fill(question, width=86, initial_indent="  - ", subsequent_indent="    "))
         typer.echo()
     if expanded.related:
-        typer.secho("Related reports not grouped with this event", bold=True)
+        typer.secho("Other reports that may be related (not grouped with this event)", bold=True)
         for report in expanded.related:
             line = textwrap.shorten(f"{report.outlet}: {report.title}", width=80, placeholder="…")
             typer.echo(f"  - {line} ({_short_id(report)})")
