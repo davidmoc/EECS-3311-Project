@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
 
+from praxis.research.assessment import ResearchAssessment
 from praxis.research.commands import ResearchContext
 from praxis.research.plan import ResearchPlan
 from praxis.research.session import ResearchBudget, ResearchSession, utc_now
@@ -16,6 +17,8 @@ class StopReason(Enum):
     ITERATIONS = "the step limit was reached"
     TOOL_CALLS = "the tool-call limit was reached"
     DURATION = "the time limit was reached"
+    SUFFICIENT = "the assessment found the research sufficiently developed"
+    NO_USEFUL_STEPS = "the assessment proposed no new searches"
 
     @property
     def is_budget(self) -> bool:
@@ -39,8 +42,9 @@ class ResearchStoppingPolicy:
         budget: ResearchBudget,
         plan: ResearchPlan,
         context: ResearchContext,
+        assessment: ResearchAssessment | None = None,
     ) -> bool:
-        return self.stop_reason(session, budget, plan, context) is not None
+        return self.stop_reason(session, budget, plan, context, assessment) is not None
 
     def stop_reason(
         self,
@@ -48,8 +52,13 @@ class ResearchStoppingPolicy:
         budget: ResearchBudget,
         plan: ResearchPlan,
         context: ResearchContext,
+        assessment: ResearchAssessment | None = None,
     ) -> StopReason | None:
         """Why the loop should stop now, or None to run another step.
+
+        ``assessment`` is the assessment just made of the situation, if
+        any; pass None once a further step has run, since that step's
+        sources have not been assessed.
 
         The budget is checked first: when research both runs out of budget
         and of steps, the reader should hear about the budget.
@@ -59,9 +68,24 @@ class ResearchStoppingPolicy:
             return exceeded
         if context.corpus_full:
             return StopReason.SOURCES_FULL
+        if assessment is not None:
+            if self.sufficient_coverage(assessment):
+                return StopReason.SUFFICIENT
+            if self.no_useful_next_steps(plan):
+                return StopReason.NO_USEFUL_STEPS
         if plan.is_complete():
             return StopReason.PLAN_COMPLETE
         return None
+
+    @staticmethod
+    def sufficient_coverage(assessment: ResearchAssessment) -> bool:
+        return not assessment.requires_more_research
+
+    @staticmethod
+    def no_useful_next_steps(plan: ResearchPlan) -> bool:
+        """After revision: nothing left to run, so the assessment's gaps
+        could not be turned into new searches."""
+        return plan.is_complete()
 
     def budget_exceeded(
         self, session: ResearchSession, budget: ResearchBudget

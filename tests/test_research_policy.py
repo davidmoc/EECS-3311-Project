@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from praxis.research import ResearchBudget, ResearchSession
+from praxis.research.assessment import ResearchAssessment
 from praxis.research.commands import ResearchContext, RetrieveEvidenceCommand
 from praxis.research.plan import ResearchPlan
 from praxis.research.policy import ResearchStoppingPolicy, StopReason
@@ -85,3 +86,31 @@ def test_budget_is_reported_before_a_finished_plan(setup):
         session.increment_iteration()
 
     assert policy().stop_reason(session, BUDGET, ResearchPlan("wages"), context) is StopReason.ITERATIONS
+
+
+def test_stops_when_the_assessment_finds_the_research_sufficient(setup):
+    session, context, plan = setup
+    sufficient = ResearchAssessment(requires_more_research=False)
+
+    reason = policy().stop_reason(session, BUDGET, plan, context, sufficient)
+
+    assert reason is StopReason.SUFFICIENT and not reason.is_budget
+    assert policy().should_stop(session, BUDGET, plan, context, sufficient)
+
+
+def test_more_research_continues_only_if_the_revision_added_steps(setup):
+    session, context, plan = setup
+    more = ResearchAssessment(requires_more_research=True)
+
+    assert policy().stop_reason(session, BUDGET, plan, context, more) is None
+    assert policy().stop_reason(session, BUDGET, ResearchPlan("wages"), context, more) is StopReason.NO_USEFUL_STEPS
+
+
+def test_budget_outranks_the_assessment(setup):
+    session, context, plan = setup
+    for _ in range(4):
+        session.increment_tool_calls()
+
+    reason = policy().stop_reason(session, BUDGET, plan, context, ResearchAssessment())
+
+    assert reason is StopReason.TOOL_CALLS
