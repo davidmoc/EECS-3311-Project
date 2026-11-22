@@ -7,8 +7,8 @@ theory through a Marxist analytical framework. The Stage 1 design is in
 > **Status:** Stage 2 implementation in progress. Working now through the
 > CLI: the multi-step research agent (F03), source-first question
 > answering (F04), the reading library (F05), AI-annotated reading (F06),
-> the reader model (F13) and the workspace (F15). The news dashboard and
-> GUI are not built yet.
+> source and framing comparison (F10), the reader model (F13) and the
+> workspace (F15). The news dashboard and GUI are not built yet.
 
 ## Prerequisites
 
@@ -77,6 +77,10 @@ python -m praxis library read abdc2552 --start 259 --count 1 --annotations
 python -m praxis annotations list abdc2552
 python -m praxis annotations remove 1a3c3cde        # id shown in brackets
 
+# Source and framing comparison (F10): two to four texts, on one subject
+python -m praxis compare b67c02e1 abdc2552 --on "the peasantry"
+python -m praxis compare 59983f05:20-22 abdc2552:61,66   # named paragraphs
+
 # Reader model (F13): see and correct what the system believes about you
 python -m praxis profile show
 python -m praxis profile know "surplus value" introductory
@@ -127,6 +131,18 @@ paragraphs the model was not shown are warned about. Annotations are
 stored with the text, and `library read` marks the paragraphs that have
 them (✎).
 
+`compare` retrieves each chosen text separately: the paragraphs named
+after the id, or the passages that best match `--on` and the model's
+keywords for it. It prints each source (lettered A, B, …, with what the
+library records about it) and its numbered passages first. The model then
+judges whether the sources are comparable (if not, the reader is warned
+that a direct comparison could mislead) and lists shared ground,
+differences (terminology, emphasis, framing, assumptions, omission,
+evidence), factual disagreements, and observations on framing, which are
+marked as interpretation. Every point must cite passages from at least two
+of the sources (an observation, from one); points that do not are left
+out and counted. Without an API key the passages are still shown.
+
 Reading with `library read` updates your reading progress, interests and
 inferred knowledge automatically; `profile know` always overrides inference.
 
@@ -145,6 +161,7 @@ API key and no network access.
 |---|---|
 | `praxis/agent/` | `PoliticalResearchAgent` facade, `ResearchCorpus`, `PromptBuilder` |
 | `praxis/app.py` | Composition root shared by CLI and GUI |
+| `praxis/comparison/` | `SourceComparison`, `SourceProfile`, `CompareSourcesCommand` (F10) |
 | `praxis/cli/` | Typer command-line interface |
 | `praxis/config.py` | Local settings and API-key handling |
 | `praxis/documents/` | Documents, passages, citations, annotations |
