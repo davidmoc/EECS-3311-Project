@@ -6,6 +6,10 @@ prompt construction, the LLM and citation checking stay behind it.
 
 from __future__ import annotations
 
+import sqlite3
+from typing import TYPE_CHECKING
+from uuid import UUID
+
 from praxis.agent.corpus import ResearchCorpus, Source, cited_numbers
 from praxis.agent.prompts import PromptBuilder, reader_context
 from praxis.agent.response import AgentResponse, ResponseStatus
@@ -22,7 +26,12 @@ from praxis.research.session import ResearchBudget, ResearchSession, StepRecord
 from praxis.research.situation import ConcreteSituation, ConcreteSituationBuilder
 from praxis.tools import ToolManager
 
+if TYPE_CHECKING:  # only for type hints: praxis.tools imports praxis.persistence
+    from praxis.persistence.research import ResearchRepository
+
 PASSAGES_PER_QUESTION = 6
+# How many more sources one continuation of a research session may add.
+SOURCES_PER_CONTINUATION = 10
 PASSAGE_SEARCH = "passage_search"
 ASSESS_STEP = "Assess the research so far"
 
@@ -46,6 +55,11 @@ NO_RESEARCH_SOURCES = (
     "No passage in the library bears on this research question, so no "
     "analysis was written. Try other words, or import texts on this subject."
 )
+NOTHING_TO_CONTINUE = (
+    "This research has no unfinished steps or open questions to follow up. "
+    "Give a direction to continue in."
+)
+NOT_SAVED_WARNING = "The research could not be saved, so it cannot be continued later: {}"
 NO_SYNTHESIS_BUDGET = (
     "The model-call limit was used up before the findings could be written "
     "up, so only the sources are shown."
@@ -67,9 +81,11 @@ class PoliticalResearchAgent:
         policy: ResearchStoppingPolicy | None = None,
         method: DialecticalMaterialistResearchMethod | None = None,
         builder: ConcreteSituationBuilder | None = None,
+        research_repository: ResearchRepository | None = None,
     ) -> None:
         """``llm`` may be None: the agent then still retrieves passages but
-        cannot assess or explain them."""
+        cannot assess or explain them. Without ``research_repository``,
+        research results are not stored and cannot be continued."""
         self._tools = tools
         self._profiles = profiles
         self._llm = llm
@@ -78,6 +94,7 @@ class PoliticalResearchAgent:
         self._policy = policy or ResearchStoppingPolicy()
         self._method = method or DialecticalMaterialistResearchMethod(llm, self._prompts)
         self._builder = builder or ConcreteSituationBuilder()
+        self._repository = research_repository
 
     # --- F03: multi-step research --------------------------------------------
 
@@ -89,14 +106,82 @@ class PoliticalResearchAgent:
         """
         if not objective.strip():
             raise AgentError("Enter a research question first.")
-        budget = budget or ResearchBudget()
-
         session = ResearchSession(objective)
         profile = self._profiles.get_profile()
         plan = self._planner.create_initial_plan(session, profile)
         context = ResearchContext(session, self._tools, profile=profile)
         situation = self._builder.build_initial_situation(session.objective)
+        return self._run(session, plan, context, situation, budget or ResearchBudget())
 
+    def continue_research(
+        self, session_id: UUID, focus: str | None = None, budget: ResearchBudget | None = None
+    ) -> ResearchResult:
+        """Run another round of a stored research session (Stage 1's
+        ``continueResearch(sessionId, request)``).
+
+        The earlier sources keep their numbers and the earlier findings are
+        kept. The round runs ``focus`` (if given) first, then any steps a
+        limit left unrun, then assesses as usual; ``budget`` applies to this
+        round only. The analysis is rewritten over all the sources.
+        """
+        previous = self.get_research(session_id)
+        focus = " ".join((focus or "").split()) or None
+        situation = previous.situation or self._builder.build_initial_situation(previous.objective)
+        unfinished = previous.unfinished_steps
+        if focus is None and not unfinished and not situation.unresolved_questions:
+            raise AgentError(NOTHING_TO_CONTINUE)
+
+        session = previous.session
+        session.resume()
+        profile = self._profiles.get_profile()
+        context = ResearchContext(
+            session, self._tools, _restore_corpus(previous), profile,
+            max_sources=len(previous.sources) + SOURCES_PER_CONTINUATION,
+            purposes=dict(previous.purposes),
+        )
+        commands = []
+        if focus is not None:
+            session.add_focus(focus)
+            commands = self._planner.plan_follow_up(session, focus, profile)
+        # Not `if previous.plan`: a plan with nothing queued has length 0, so is falsy.
+        taken = previous.plan.taken if previous.plan is not None else []
+        plan = ResearchPlan(session.objective, [*commands, *unfinished], taken=taken)
+        return self._run(session, plan, context, situation, budget or ResearchBudget())
+
+    def get_research(self, session_id: UUID) -> ResearchResult:
+        """A stored research result, as it was last saved."""
+        result = self._require_repository().get(session_id)
+        if result is None:
+            raise AgentError(f"There is no research session {session_id}.")
+        return result
+
+    def find_research(self, id_prefix: str) -> UUID:
+        """The stored session whose id starts with ``id_prefix``."""
+        prefix = id_prefix.strip().lower()
+        if not prefix:
+            raise AgentError("A research session id is required.")
+        matches = self._require_repository().find_ids(prefix)
+        if not matches:
+            raise AgentError(f"No research session with id starting '{prefix}'.")
+        if len(matches) > 1:
+            raise AgentError(f"Id '{prefix}' matches {len(matches)} sessions; use more characters.")
+        return matches[0]
+
+    def _require_repository(self) -> ResearchRepository:
+        if self._repository is None:
+            raise AgentError("Research sessions are not being stored.")
+        return self._repository
+
+    def _run(
+        self,
+        session: ResearchSession,
+        plan: ResearchPlan,
+        context: ResearchContext,
+        situation: ConcreteSituation,
+        budget: ResearchBudget,
+    ) -> ResearchResult:
+        """SD01's loop: run commands, assess when the plan runs out, revise,
+        until the policy stops it; then synthesise and store the result."""
         retried_from: dict[ResearchCommand, int] = {}  # retry -> failed step index
         assessment: ResearchAssessment | None = None  # of the sources so far
         while True:
@@ -130,7 +215,19 @@ class PoliticalResearchAgent:
                 if retry is not None:
                     retried_from[retry] = index
 
-        return self._finish_research(session, budget, plan, context, situation, stop)
+        result = self._finish_research(session, budget, plan, context, situation, stop)
+        self._store(result)
+        return result
+
+    def _store(self, result: ResearchResult) -> None:
+        """Save ``result`` so it can be reopened and continued. A failure
+        to save does not lose the result the reader is about to see."""
+        if self._repository is None:
+            return
+        try:
+            self._repository.save(result)
+        except sqlite3.Error as exc:
+            result.session.add_warning(NOT_SAVED_WARNING.format(exc))
 
     def _can_assess(
         self, session: ResearchSession, budget: ResearchBudget, context: ResearchContext
@@ -212,7 +309,7 @@ class PoliticalResearchAgent:
             return partial(NO_SYNTHESIS_BUDGET)
 
         prompt = self._prompts.build_research_prompt(
-            session.objective, corpus, context.purposes, context.profile, unfinished,
+            session.question, corpus, context.purposes, context.profile, unfinished,
             established=established_lines(situation),
             questions=situation.unresolved_questions,
         )
@@ -373,3 +470,13 @@ class _Usage:
 
     def __init__(self) -> None:
         self.tokens = 0
+
+
+def _restore_corpus(result: ResearchResult) -> ResearchCorpus:
+    """The corpus of an earlier round, with every source under its old number."""
+    corpus = ResearchCorpus()
+    for source in result.sources:
+        restored = corpus.add_citation(source.passage, source.citation)
+        if restored.number != source.number:
+            raise AgentError("The stored research session's sources are out of order.")
+    return corpus

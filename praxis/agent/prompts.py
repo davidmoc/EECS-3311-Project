@@ -168,6 +168,19 @@ class PromptBuilder:
             )
         return Prompt(system=system, user=objective)
 
+    def build_follow_up_plan_prompt(
+        self, objective: str, focus: str, profile: ReaderProfile | None = None
+    ) -> Prompt:
+        """A plan for continuing earlier research in the direction ``focus``."""
+        prompt = self.build_plan_prompt(objective, profile)
+        return Prompt(
+            system=prompt.system,
+            user=(
+                f"{objective}\n\nThis question has already been researched. The reader "
+                f"now wants to follow up on: {focus}\nPlan steps for the follow-up only."
+            ),
+        )
+
     @staticmethod
     def parse_plan(text: str) -> list[tuple[str, str]]:
         """``(kind, keywords)`` pairs from the model's plan, in order.

@@ -24,6 +24,7 @@ from praxis.persistence import (
     SQLReaderProfileRepository,
     SQLWorkspaceRepository,
 )
+from praxis.persistence.research import SQLResearchRepository
 from praxis.reader_model.events import LearningEventBus
 from praxis.reader_model.service import ReaderProfileService
 from praxis.reader_model.updater import ReaderModelUpdater
@@ -78,7 +79,9 @@ def build_application(
         profiles=profiles,
         events=events,
         workspace=WorkspaceService(SQLWorkspaceRepository(database)),
-        agent=PoliticalResearchAgent(tools, profiles, llm),
+        agent=PoliticalResearchAgent(
+            tools, profiles, llm, research_repository=SQLResearchRepository(database)
+        ),
         owns_database=owns_database,
     )
 

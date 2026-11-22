@@ -58,7 +58,7 @@ class DialecticalMaterialistResearchMethod:
         if self._llm is None or context.corpus.is_empty:
             return None
         prompt = self._prompts.build_assessment_prompt(
-            session.objective,
+            session.question,
             context.corpus,
             context.purposes,
             established=established_lines(situation),

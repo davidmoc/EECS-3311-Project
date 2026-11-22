@@ -8,7 +8,7 @@ plan is used instead, so research can always start.
 from __future__ import annotations
 
 from praxis.agent.prompts import PromptBuilder
-from praxis.llm import LLMClient, LLMError
+from praxis.llm import LLMClient, LLMError, Prompt
 from praxis.reader_model import ReaderProfile
 from praxis.research.assessment import ResearchAssessment
 from praxis.research.commands import (
@@ -20,6 +20,9 @@ from praxis.research.commands import (
 from praxis.research.plan import ResearchPlan
 from praxis.research.session import ResearchSession
 
+FALLBACK_FOLLOW_UP_WARNING = (
+    "The follow-up could not be planned, so it was searched as given."
+)
 FALLBACK_PLAN_WARNING = (
     "The research plan could not be generated, so a basic plan "
     "(search the question as asked) was used."
@@ -46,6 +49,18 @@ class ResearchPlanner:
             commands = [RetrieveTheoryCommand(objective)]
         commands.append(RetrieveEvidenceCommand(objective))
         return ResearchPlan(objective, commands)
+
+    def plan_follow_up(
+        self, session: ResearchSession, focus: str, profile: ReaderProfile | None = None
+    ) -> list[ResearchCommand]:
+        """Commands for continuing ``session`` in the direction ``focus``:
+        the model's steps, then the focus as given, to top up."""
+        commands = self._ask_for_plan(
+            session, self._prompts.build_follow_up_plan_prompt(session.objective, focus, profile)
+        )
+        if not commands:
+            session.add_warning(FALLBACK_FOLLOW_UP_WARNING)
+        return [*commands, RetrieveEvidenceCommand(focus)]
 
     def revise_plan(
         self, plan: ResearchPlan, assessment: ResearchAssessment
@@ -85,9 +100,13 @@ class ResearchPlanner:
     def _planned_commands(
         self, session: ResearchSession, profile: ReaderProfile | None
     ) -> list[ResearchCommand]:
+        return self._ask_for_plan(session, self._prompts.build_plan_prompt(session.objective, profile))
+
+    def _ask_for_plan(self, session: ResearchSession, prompt: Prompt) -> list[ResearchCommand]:
+        """The model's plan as commands; empty if there is no model, it
+        fails, or the reply has no usable step."""
         if self._llm is None:
             return []
-        prompt = self._prompts.build_plan_prompt(session.objective, profile)
         try:
             response = self._llm.generate(prompt)
         except LLMError:
