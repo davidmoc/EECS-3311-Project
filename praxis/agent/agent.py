@@ -6,9 +6,7 @@ prompt construction, the LLM and citation checking stay behind it.
 
 from __future__ import annotations
 
-import re
-
-from praxis.agent.corpus import ResearchCorpus, Source
+from praxis.agent.corpus import ResearchCorpus, Source, cited_numbers
 from praxis.agent.prompts import PromptBuilder, reader_context
 from praxis.agent.response import AgentResponse, ResponseStatus
 from praxis.llm import LLMClient, LLMError
@@ -22,9 +20,6 @@ from praxis.tools import ToolManager
 
 PASSAGES_PER_QUESTION = 6
 PASSAGE_SEARCH = "passage_search"
-
-# "[2]" or "[1, 3]" in the model's explanation.
-_CITATION_MARK = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
 
 NO_SOURCES_WARNING = (
     "No passage in the library addresses this question, so no answer was "
@@ -293,10 +288,7 @@ class PoliticalResearchAgent:
 def check_citations(text: str, corpus: ResearchCorpus) -> tuple[list[Source], list[int]]:
     """The sources ``text`` cites, in order of first mention, and any cited
     numbers that are not in ``corpus``."""
-    numbers: dict[int, None] = {}
-    for group in _CITATION_MARK.findall(text):
-        for number in group.split(","):
-            numbers.setdefault(int(number), None)
+    numbers = cited_numbers(text)
     cited = [corpus.source(n) for n in numbers if corpus.has_source(n)]
     unknown = [n for n in numbers if not corpus.has_source(n)]
     return cited, unknown

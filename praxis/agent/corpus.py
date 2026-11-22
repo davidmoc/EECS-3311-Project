@@ -7,10 +7,23 @@ in the answer against material that was actually retrieved.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from uuid import UUID
 
 from praxis.documents import Citation, Document, Passage
+
+# "[2]" or "[1, 3]" in model output.
+CITATION_MARK = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
+
+
+def cited_numbers(text: str) -> list[int]:
+    """Source numbers cited in ``text``, each once, in order of first mention."""
+    numbers: dict[int, None] = {}
+    for group in CITATION_MARK.findall(text):
+        for number in group.split(","):
+            numbers.setdefault(int(number), None)
+    return list(numbers)
 
 
 @dataclass(frozen=True)

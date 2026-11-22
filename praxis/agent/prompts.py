@@ -63,7 +63,40 @@ _PURPOSE_HEADINGS = {
     "evidence": "Retrieved as evidence on the question",
     "theory": "Retrieved for theoretical background",
     "history": "Retrieved for historical development",
+    "relation": "Retrieved to investigate a material relation",
+    "contradiction": "Retrieved to investigate a contradiction",
 }
+
+MAX_FOLLOW_UPS = 3
+
+ASSESSMENT_RULES = f"""\
+You assess research in progress for Praxis, a platform for studying \
+politics, history and Marxist theory from primary sources. Analyse the \
+numbered passages using historical and dialectical materialism: the material \
+conditions, class and production relations, institutions and ideas involved; \
+how the situation developed historically; and the contradictions that drive \
+it. Then say what is still missing.
+
+Reply only with lines in these forms, one item per line:
+relation: <class|production|institutional|ideological> | <who or what is related, and how> [n]
+contradiction: <one side> | <the other side> | <how they are related and develop> [n]
+development: <a stage or turning point in how the situation developed> [n]
+conflict: <how two or more passages disagree> [n, m]
+search: <relation|contradiction|history|evidence|theory> | <keywords for a further library search>
+question: <a question the passages leave open>
+verdict: <sufficient|more research needed>
+
+Rules:
+- Every relation, contradiction, development and conflict cites the \
+passages it rests on as [n]. Leave out anything the passages do not support.
+- A conflict cites at least two passages that disagree.
+- Propose at most {MAX_FOLLOW_UPS} searches, only for gaps that matter for \
+the question, in the vocabulary those texts would use. Do not repeat a \
+search already made.
+- Write "verdict: sufficient" when the passages already cover the \
+question's conditions, history and main contradictions well enough to write \
+it up.
+- No other text."""
 
 SOURCE_FIRST_RULES = """\
 You are the research assistant of Praxis, a platform for studying politics, \
@@ -156,17 +189,6 @@ class PromptBuilder:
         if corpus.is_empty:
             raise ValueError("A research prompt needs at least one source.")
 
-        groups: dict[str, list[str]] = {}
-        for source in corpus.sources:
-            purpose = purposes.get(source.number, "evidence")
-            groups.setdefault(purpose, []).append(
-                f"{source.label} {source.citation.format()}\n{source.citation.quoted_text}"
-            )
-        sections = [
-            f"### {_PURPOSE_HEADINGS.get(purpose, purpose)}\n\n" + "\n\n".join(passages)
-            for purpose, passages in groups.items()
-        ]
-
         depth = profile.explanation_depth if profile else ExplanationDepth.STANDARD
         system = (
             f"{SOURCE_FIRST_RULES}\n\n{RESEARCH_SYNTHESIS_FORMAT}\n\n"
@@ -182,8 +204,35 @@ class PromptBuilder:
                 f"Research stopped before every planned step ran: {unfinished}. "
                 "Say which parts of the question the passages do not cover.\n\n"
             )
-        user += "Passages:\n\n" + "\n\n".join(sections)
+        user += "Passages:\n\n" + _grouped_passages(corpus, purposes)
         return Prompt(system=system, user=user)
+
+    def build_assessment_prompt(
+        self,
+        objective: str,
+        corpus: ResearchCorpus,
+        purposes: dict[int, str],
+        established: list[str],
+        searches_done: list[str],
+    ) -> Prompt:
+        """A prompt asking the model to assess research in progress.
+
+        ``established`` lists findings from earlier assessments (already in
+        "kind: text [n]" form) so the model builds on them instead of
+        repeating them; ``searches_done`` lists the searches already made.
+        """
+        if corpus.is_empty:
+            raise ValueError("An assessment prompt needs at least one source.")
+        user = f"Research question: {objective}\n\n"
+        if searches_done:
+            user += "Searches already made:\n" + "\n".join(f"- {s}" for s in searches_done) + "\n\n"
+        if established:
+            user += (
+                "Already established (do not repeat these):\n"
+                + "\n".join(f"- {line}" for line in established) + "\n\n"
+            )
+        user += "Passages:\n\n" + _grouped_passages(corpus, purposes)
+        return Prompt(system=ASSESSMENT_RULES, user=user)
 
     @staticmethod
     def split_open_questions(text: str) -> tuple[str, list[str]]:
@@ -239,6 +288,20 @@ class PromptBuilder:
             system=system,
             user=f"Question: {question}\n\nPassages:\n\n{passages}",
         )
+
+
+def _grouped_passages(corpus: ResearchCorpus, purposes: dict[int, str]) -> str:
+    """The corpus's passages under headings saying why each was retrieved."""
+    groups: dict[str, list[str]] = {}
+    for source in corpus.sources:
+        purpose = purposes.get(source.number, "evidence")
+        groups.setdefault(purpose, []).append(
+            f"{source.label} {source.citation.format()}\n{source.citation.quoted_text}"
+        )
+    return "\n\n".join(
+        f"### {_PURPOSE_HEADINGS.get(purpose, purpose)}\n\n" + "\n\n".join(passages)
+        for purpose, passages in groups.items()
+    )
 
 
 def reader_context(profile: ReaderProfile | None) -> str | None:
