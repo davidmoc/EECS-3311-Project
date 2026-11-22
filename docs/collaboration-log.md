@@ -128,5 +128,5 @@ platform.openai.com.
   - `ResearchSession` also records each step, model calls, tokens and warnings, so the result can show how the research was done.
   - No `ConcreteSituation`, `DialecticalMaterialistResearchMethod` or `MaterialistAnalysis` yet. The synthesis is one model call that writes fixed sections (findings, historical context, theoretical connections, open questions), with open questions split out. As with F04, sources are returned with a warning when the model fails, rather than only an error.
   - `ResearchResult.getRecommendedReadings()` returns the texts behind the cited sources.
-- **Human contribution:** _Code review pending._
+- **Human contribution:** Reviewed the code and approved it ("i reviewed the code, its good").
 - **Outcome:** Eight code commits and this documentation commit, pushed to `main`.
