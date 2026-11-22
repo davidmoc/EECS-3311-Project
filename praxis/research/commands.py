@@ -184,3 +184,8 @@ COMMAND_TYPES: dict[str, type[ResearchCommand]] = {
     "relation": InvestigateRelationCommand,
     "contradiction": InvestigateContradictionCommand,
 }
+
+# The reverse: the kind name of each command class, used when storing a plan.
+COMMAND_KINDS: dict[type[ResearchCommand], str] = {
+    command_type: kind for kind, command_type in COMMAND_TYPES.items()
+}

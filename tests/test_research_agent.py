@@ -78,6 +78,7 @@ def test_research_plans_retrieves_and_synthesises(library_database):
     assert result.open_questions == ("What did the peasantry do?", "Why was Prussia decisive?")
     assert [s.number for s in result.cited] == [1, 2, 3]
     assert result.warnings == ()
+    assert not result.is_incomplete and result.unfinished_steps == []
     assert (session.llm_call_count, session.tokens_used) == (3, 45)
     assert session.tool_call_count == 3
     assert "### Retrieved for historical development" in llm.prompts[1].user
@@ -135,6 +136,14 @@ def test_budget_stops_research_early_and_says_what_was_skipped(library_database)
     assert result.warnings[0].startswith("Research stopped early because the tool-call limit")
     assert "Retrieve theory: bourgeoisie state" in result.warnings[0]
     assert "Research stopped before every planned step ran" in llm.prompts[1].user
+    assert result.is_incomplete
+    assert [c.describe() for c in result.unfinished_steps] == [
+        "Retrieve theory: bourgeoisie state",
+        f"Retrieve evidence: {OBJECTIVE}",
+    ]
+    assert [c.describe() for c in result.plan.taken] == [
+        "Trace historical development: 1848 revolution Germany",
+    ]
 
 
 def test_without_a_model_the_sources_are_still_gathered(library_database):

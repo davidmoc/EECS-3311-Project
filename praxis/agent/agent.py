@@ -130,7 +130,7 @@ class PoliticalResearchAgent:
                 if retry is not None:
                     retried_from[retry] = index
 
-        return self._finish_research(session, budget, plan.pending, context, situation, stop)
+        return self._finish_research(session, budget, plan, context, situation, stop)
 
     def _can_assess(
         self, session: ResearchSession, budget: ResearchBudget, context: ResearchContext
@@ -178,16 +178,19 @@ class PoliticalResearchAgent:
         self,
         session: ResearchSession,
         budget: ResearchBudget,
-        skipped: list[ResearchCommand],
+        plan: ResearchPlan,
         context: ResearchContext,
         situation: ConcreteSituation,
         stop: StopReason,
     ) -> ResearchResult:
         corpus = context.corpus
+        skipped = plan.pending
         if corpus.is_empty:
             session.add_warning(NO_RESEARCH_SOURCES)
             session.fail("no sources found")
-            return ResearchResult(session, ResponseStatus.NO_SOURCES, stop, situation=situation)
+            return ResearchResult(
+                session, ResponseStatus.NO_SOURCES, stop, situation=situation, plan=plan
+            )
 
         unfinished = None
         if stop.is_budget and skipped:
@@ -200,7 +203,7 @@ class PoliticalResearchAgent:
             session.complete()
             return ResearchResult(
                 session, ResponseStatus.EXPLANATION_FAILED, stop,
-                tuple(corpus.sources), dict(context.purposes), situation=situation,
+                tuple(corpus.sources), dict(context.purposes), situation=situation, plan=plan,
             )
 
         if self._llm is None:
@@ -243,6 +246,7 @@ class PoliticalResearchAgent:
             open_questions=tuple(questions),
             personalized=reader_context(context.profile) is not None,
             situation=situation,
+            plan=plan,
         )
 
     # --- F04: source-first question answering ------------------------------

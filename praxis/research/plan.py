@@ -13,11 +13,20 @@ class ResearchPlan:
     """Commands still to run, plus a memory of those already taken, so a
     revised plan never repeats a search."""
 
-    def __init__(self, objective: str, commands: Iterable[ResearchCommand] = ()) -> None:
+    def __init__(
+        self,
+        objective: str,
+        commands: Iterable[ResearchCommand] = (),
+        taken: Iterable[ResearchCommand] = (),
+    ) -> None:
+        """``taken`` restores, for a continued session, the commands that
+        earlier rounds already ran."""
         self.objective = objective
         # A deque is a double-ended queue: cheap to add or remove at both ends.
         self._commands: deque[ResearchCommand] = deque()
-        self._taken: set[tuple[type, str]] = set()
+        self._taken: dict[tuple[type, str], ResearchCommand] = {}
+        for command in taken:
+            self._taken.setdefault(command.key, command)
         for command in commands:
             self.add_command(command)
 
@@ -37,7 +46,7 @@ class ResearchPlan:
         if not self._commands:
             raise ResearchError("The research plan has no commands left.")
         command = self._commands.popleft()
-        self._taken.add(command.key)
+        self._taken.setdefault(command.key, command)
         return command
 
     def replace_commands(self, commands: Iterable[ResearchCommand]) -> None:
@@ -51,6 +60,11 @@ class ResearchPlan:
     @property
     def pending(self) -> list[ResearchCommand]:
         return list(self._commands)
+
+    @property
+    def taken(self) -> list[ResearchCommand]:
+        """Each action already run, once, in the order first run."""
+        return list(self._taken.values())
 
     def __len__(self) -> int:
         return len(self._commands)

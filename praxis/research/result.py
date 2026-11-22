@@ -9,6 +9,8 @@ from uuid import UUID
 from praxis.agent.corpus import Source
 from praxis.agent.response import ResponseStatus
 from praxis.documents import Citation
+from praxis.research.commands import ResearchCommand
+from praxis.research.plan import ResearchPlan
 from praxis.research.policy import StopReason
 from praxis.research.session import ResearchSession, utc_now
 from praxis.research.situation import ConcreteSituation
@@ -44,6 +46,9 @@ class ResearchResult:
     personalized: bool = False
     # What the assessments established; None if research never got that far.
     situation: ConcreteSituation | None = None
+    # The plan as research stopped: what was run, and what was still queued.
+    # Kept so the research can be continued without repeating a search.
+    plan: ResearchPlan | None = None
     created_at: datetime = field(default_factory=utc_now)
 
     @property
@@ -57,6 +62,19 @@ class ResearchResult:
     @property
     def is_grounded(self) -> bool:
         return self.status is ResponseStatus.ANSWERED and bool(self.cited)
+
+    @property
+    def unfinished_steps(self) -> list[ResearchCommand]:
+        """Planned steps that were not run because a limit was reached."""
+        if self.plan is None or self.stop_reason is None or not self.stop_reason.is_budget:
+            return []
+        return self.plan.pending
+
+    @property
+    def is_incomplete(self) -> bool:
+        """No analysis was written, or a limit cut the plan short (UC15:
+        such a session is restored as incomplete, not as complete)."""
+        return self.status is not ResponseStatus.ANSWERED or bool(self.unfinished_steps)
 
     def get_citations(self) -> list[Citation]:
         return [source.citation for source in self.cited]

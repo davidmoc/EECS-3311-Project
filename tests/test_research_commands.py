@@ -138,3 +138,15 @@ def test_investigation_commands_record_their_own_purpose(library_database):
 
     assert set(context.purposes.values()) == {"relation", "contradiction"}
     assert InvestigateRelationCommand("x").describe() == "Investigate relation: x"
+
+
+def test_a_restored_plan_remembers_what_earlier_rounds_ran():
+    earlier = [RetrieveEvidenceCommand("wages"), RetrieveTheoryCommand("value")]
+    plan = ResearchPlan("wages", [RetrieveTheoryCommand("VALUE"), RetrieveEvidenceCommand("rent")],
+                        taken=earlier)
+
+    assert plan.pending == [RetrieveEvidenceCommand("rent")]
+    assert plan.taken == earlier
+    plan.get_next_command()
+    assert plan.taken == [*earlier, RetrieveEvidenceCommand("rent")]
+    assert not plan.add_command(RetrieveEvidenceCommand("Wages"))
