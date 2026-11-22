@@ -54,6 +54,19 @@ CREATE TABLE IF NOT EXISTS saved_items (
     tags      TEXT NOT NULL,
     saved_at  TEXT NOT NULL
 );
+
+-- Research sessions, so research can be reread and continued (F03). The
+-- whole result is in data (JSON); the other columns serve the session list.
+CREATE TABLE IF NOT EXISTS research_sessions (
+    id           TEXT PRIMARY KEY,
+    objective    TEXT NOT NULL,
+    status       TEXT NOT NULL,
+    incomplete   INTEGER NOT NULL,
+    rounds       INTEGER NOT NULL,
+    source_count INTEGER NOT NULL,
+    updated_at   TEXT NOT NULL,
+    data         TEXT NOT NULL
+);
 """
 
 

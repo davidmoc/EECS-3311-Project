@@ -68,3 +68,13 @@ class ResearchPlan:
 
     def __len__(self) -> int:
         return len(self._commands)
+
+    def __eq__(self, other: object) -> bool:
+        """Same objective, same queue, same actions already run. (Defining
+        ``__eq__`` makes Python drop the default hash, which is right for a
+        mutable object.)"""
+        if not isinstance(other, ResearchPlan):
+            return NotImplemented
+        return (self.objective, self.pending, self.taken) == (
+            other.objective, other.pending, other.taken
+        )
