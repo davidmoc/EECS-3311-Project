@@ -10,6 +10,8 @@ from praxis.comparison.command import CompareSourcesCommand
 from praxis.documents import Book, NewsArticle
 from praxis.llm import LLMError
 from praxis.persistence import Database, SQLDocumentRepository, SQLReaderProfileRepository
+from praxis.persistence.comparisons import SQLComparisonRepository
+from praxis.persistence.research import SQLResearchRepository
 from praxis.reader_model.service import ReaderProfileService
 from praxis.research.commands import ResearchContext
 from praxis.research.session import ResearchSession
@@ -110,7 +112,7 @@ uncertain: whether Lenin had the Manifesto passage in mind
 
 def test_comparison_cites_passages_of_both_sources(database, books):
     manifesto, lenin, _ = books
-    llm = ScriptedLLM(KEYWORDS, REPLY)
+    llm = ScriptedLLM(REPLY)  # every paragraph is named, so no keyword call
     # Named paragraphs fix the numbering: [1], [2] are Marx's, [3], [4] Lenin's.
     comparison = agent_for(database, llm).compare_sources(
         [SourceSelection.of(manifesto, (1, 2)), SourceSelection.of(lenin, (1, 2))], "the state"
@@ -126,8 +128,9 @@ def test_comparison_cites_passages_of_both_sources(database, books):
     assert comparison.uncertainties == ("whether Lenin had the Manifesto passage in mind",)
     # The difference citing only the Manifesto is dropped, and the reader told.
     assert any("1 point of the comparison" in w for w in comparison.warnings)
-    assert comparison.tokens_used == 30  # keywords and comparison
-    prompt = llm.prompts[1]
+    assert comparison.tokens_used == 15
+    assert len(llm.prompts) == 1
+    prompt = llm.prompts[0]
     assert "### Source A: Marx, “Manifesto” (book)" in prompt.user
     assert "### Source B: Lenin, “State and Revolution” (book)" in prompt.user
 
@@ -248,3 +251,72 @@ def test_news_outlet_reaches_the_prompt(database, books):
     llm = ScriptedLLM(KEYWORDS, "comparability: partly comparable | different scale")
     agent_for(database, llm).compare_sources(selections(manifesto, article), "the state")
     assert "Staff, “State budget passes” (news, published by Example Wire)" in llm.prompts[1].user
+
+
+# --- storing, reopening, and comparing from research -------------------------------
+
+
+def stored_agent(database, llm=None):
+    tools = ToolManager()
+    for tool in ToolFactory(SQLDocumentRepository(database)).create_all():
+        tools.register_tool(tool)
+    return PoliticalResearchAgent(
+        tools,
+        ReaderProfileService(SQLReaderProfileRepository(database)),
+        llm,
+        research_repository=SQLResearchRepository(database),
+        comparison_repository=SQLComparisonRepository(database),
+    )
+
+
+def test_a_comparison_is_stored_and_can_be_reopened(database, books):
+    manifesto, lenin, _ = books
+    comparison = stored_agent(database, ScriptedLLM(KEYWORDS, REPLY)).compare_sources(
+        selections(manifesto, lenin), "the state"
+    )
+    agent = stored_agent(database)
+    found = agent.find_comparison(str(comparison.id)[:8])
+    assert agent.get_comparison(found) == comparison
+    assert [s.subject for s in agent.list_comparisons()] == ["the state"]
+
+
+def test_a_comparison_of_fewer_than_two_sources_is_not_stored(database, books):
+    manifesto, _, cookbook = books
+    agent = stored_agent(database, ScriptedLLM(KEYWORDS))
+    agent.compare_sources(selections(manifesto, cookbook), "the state")
+    assert agent.list_comparisons() == []
+
+
+def test_unknown_comparison_ids_are_reported(database, books):
+    agent = stored_agent(database)
+    with pytest.raises(AgentError, match="No comparison"):
+        agent.find_comparison("abc")
+
+
+def test_research_sources_are_compared_on_the_research_question(library_database):
+    plan = "history: 1848 revolution Germany\ntheory: bourgeoisie state"
+    synthesis = "## Findings\nThe bourgeoisie made peace with the monarchy [1]."
+    research = stored_agent(library_database, ScriptedLLM(plan, "verdict: sufficient", synthesis)).research(
+        "Why did the German revolution of 1848 fail?"
+    )
+    titles = {s.citation.document_title for s in research.sources}
+    assert len(titles) == 2  # the research drew on both texts
+
+    llm = ScriptedLLM("comparability: comparable | same events")
+    comparison = stored_agent(library_database, llm).compare_research_sources(research.session.id)
+
+    assert comparison.subject == research.objective
+    assert {p.title for p in comparison.profiles} == titles
+    # The research's own passages are compared, so no keyword search is made.
+    assert len(llm.prompts) == 1
+    assert {s.passage.id for s in comparison.passages} == {s.passage.id for s in research.sources}
+
+
+def test_research_on_one_text_cannot_be_compared(library_database):
+    plan = "evidence: wage labour subsistence"
+    research = stored_agent(library_database, ScriptedLLM(plan, "verdict: sufficient", "## Findings\nWages [1].")).research(
+        "What are wages?"
+    )
+    assert {s.citation.document_title for s in research.sources} == {"The Communist Manifesto"}
+    with pytest.raises(AgentError, match="only one text"):
+        stored_agent(library_database).compare_research_sources(research.session.id)

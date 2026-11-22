@@ -37,6 +37,7 @@ from praxis.research.situation import ConcreteSituation, ConcreteSituationBuilde
 from praxis.tools import ToolManager
 
 if TYPE_CHECKING:  # only for type hints: praxis.tools imports praxis.persistence
+    from praxis.persistence.comparisons import ComparisonRepository, ComparisonSummary
     from praxis.persistence.research import ResearchRepository, ResearchSessionSummary
 
 PASSAGES_PER_QUESTION = 6
@@ -86,6 +87,7 @@ COMPARISON_UNREADABLE = (
     "The comparison could not be read, so only the passages are shown; "
     "compare them directly."
 )
+COMPARISON_NOT_STORED = "The comparison could not be stored, so it cannot be reopened: {}"
 LOW_COMPARABILITY = (
     "These sources are not sufficiently comparable{reason} A direct "
     "comparison could mislead."
@@ -108,10 +110,12 @@ class PoliticalResearchAgent:
         method: DialecticalMaterialistResearchMethod | None = None,
         builder: ConcreteSituationBuilder | None = None,
         research_repository: ResearchRepository | None = None,
+        comparison_repository: ComparisonRepository | None = None,
     ) -> None:
         """``llm`` may be None: the agent then still retrieves passages but
         cannot assess or explain them. Without ``research_repository``,
-        research results are not stored and cannot be continued."""
+        research results are not stored and cannot be continued; without
+        ``comparison_repository``, comparisons are not stored."""
         self._tools = tools
         self._profiles = profiles
         self._llm = llm
@@ -121,6 +125,7 @@ class PoliticalResearchAgent:
         self._method = method or DialecticalMaterialistResearchMethod(llm, self._prompts)
         self._builder = builder or ConcreteSituationBuilder()
         self._repository = research_repository
+        self._comparisons = comparison_repository
 
     # --- F03: multi-step research --------------------------------------------
 
@@ -386,8 +391,66 @@ class PoliticalResearchAgent:
 
         Each source is retrieved through the tool layer, then the model
         compares the passages. The passages are always returned; without
-        a model, or if it fails, they are all the reader gets.
+        a model, or if it fails, they are all the reader gets. A
+        comparison of two or more sources is stored.
         """
+        comparison = self._compare(selections, subject)
+        if self._comparisons is not None and len(comparison.profiles) >= 2:
+            try:
+                self._comparisons.save(comparison)
+            except sqlite3.Error as exc:
+                comparison.warnings = (*comparison.warnings, COMPARISON_NOT_STORED.format(exc))
+        return comparison
+
+    def compare_research_sources(self, session_id: UUID) -> SourceComparison:
+        """Compare the texts a stored research session drew on, on its
+        question, using the passages the research retrieved from each
+        (UC10: "requests a comparison from an event or research view")."""
+        research = self.get_research(session_id)
+        by_document: dict[UUID, list[Source]] = {}
+        for source in research.sources:
+            by_document.setdefault(source.citation.document_id, []).append(source)
+        if len(by_document) < 2:
+            raise AgentError("This research drew on only one text, so there is nothing to compare.")
+        # The texts that supplied most passages; earlier ones first on a tie.
+        chosen = sorted(by_document.values(), key=len, reverse=True)[:MAX_COMPARED_SOURCES]
+        chosen.sort(key=lambda sources: sources[0].number)
+        selections = [
+            SourceSelection(
+                sources[0].citation.document_id,
+                tuple(n for n in (_paragraph_number(s) for s in sources) if n),
+                sources[0].citation.document_title,
+            )
+            for sources in chosen
+        ]
+        return self.compare_sources(selections, research.objective)
+
+    def get_comparison(self, comparison_id: UUID) -> SourceComparison:
+        comparison = self._require_comparisons().get(comparison_id)
+        if comparison is None:
+            raise AgentError(f"There is no comparison {comparison_id}.")
+        return comparison
+
+    def list_comparisons(self, limit: int = 20) -> list[ComparisonSummary]:
+        return self._require_comparisons().list_recent(limit)
+
+    def find_comparison(self, id_prefix: str) -> UUID:
+        prefix = id_prefix.strip().lower()
+        if not prefix:
+            raise AgentError("A comparison id is required.")
+        matches = self._require_comparisons().find_ids(prefix)
+        if not matches:
+            raise AgentError(f"No comparison with id starting '{prefix}'.")
+        if len(matches) > 1:
+            raise AgentError(f"Id '{prefix}' matches {len(matches)} comparisons; use more characters.")
+        return matches[0]
+
+    def _require_comparisons(self) -> ComparisonRepository:
+        if self._comparisons is None:
+            raise AgentError("Comparisons are not being stored.")
+        return self._comparisons
+
+    def _compare(self, selections: list[SourceSelection], subject: str) -> SourceComparison:
         selections = list(dict.fromkeys(selections))
         if len({s.document_id for s in selections}) < 2:
             raise AgentError("Choose at least two different sources to compare.")
@@ -404,7 +467,8 @@ class PoliticalResearchAgent:
         context = ResearchContext(session, self._tools, profile=profile)
         # The reader's words, and the model's keywords for them, are searched.
         usage = _Usage()
-        keywords = tuple(self._search_terms(subject, usage)) if subject else ()
+        by_subject = any(not s.paragraphs for s in selections)
+        keywords = tuple(self._search_terms(subject, usage)) if by_subject else ()
         CompareSourcesCommand(
             subject or SELECTED_PASSAGES, tuple(selections), keywords=keywords
         ).execute(context)
@@ -572,6 +636,11 @@ class PoliticalResearchAgent:
                     return corpus
                 corpus.add_passage(match.document, match.passage)
         return corpus
+
+
+def _paragraph_number(source: Source) -> int | None:
+    digits = source.citation.locator.lstrip("¶")
+    return int(digits) if digits.isdigit() else None
 
 
 def _passages_by_source(corpus: ResearchCorpus) -> list[tuple[Document, list[Source]]]:
