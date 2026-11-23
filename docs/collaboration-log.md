@@ -487,3 +487,12 @@ platform.openai.com.
   - Saving is offered where the CLI offers `--save`, except comparisons, which are already stored and listed on the compare page.
 - **Human contribution:** Reviewed the code.
 - **Outcome:** Four code commits and this documentation commit.
+
+### 2026-11-22 — README rewrite
+
+- **Task:** Make the README fully up to date with the app and easy to use.
+- **Input/Instruction:** The user asked for the README to be brought up to date with the app's functionality and made easy to use.
+- **AI contribution:** Checked every CLI command and option against `--help` and the GUI pages against `praxis/gui/launch.py`, then restructured the README: a four-step quick start, a feature table mapping F01–F15 to their GUI page and CLI command, the GUI pages in sidebar order, a CLI reference grouped by task with copy-pasteable examples, the per-feature explanations in collapsible sections, and a troubleshooting table. Added the commands the old README left out (`library topics`, `news feeds`, `profile forget/personalize/background/reset`, `workspace save-text/note/search/remove`, `sessions analyze/traditions`) and the CLI-only list now includes Gutenberg import and `.txt` download.
+- **Problems met:** The old README said `pip install -e .` gives a `praxis` command; it fails, because setuptools finds several top-level folders and `pyproject.toml` does not name the package. The README now uses `python -m praxis` throughout; `pyproject.toml` was not changed.
+- **Human contribution:** Requested the change.
+- **Outcome:** One documentation commit.
