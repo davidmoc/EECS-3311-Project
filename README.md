@@ -4,12 +4,13 @@ An AI-agent platform for researching current events, history and political
 theory through a Marxist analytical framework. The Stage 1 design is in
 [`Stage 1 - Proposal/`](Stage%201%20-%20Proposal/).
 
-> **Status:** Stage 2 implementation in progress. Working now through the
-> CLI: the multi-step research agent (F03), source-first question
-> answering (F04), the reading library (F05), AI-annotated reading (F06),
-> source and framing comparison (F10), the reader model (F13), the
-> workspace (F15), the news dashboard (F01) and event exploration (F02).
-> The GUI is not built yet.
+> **Status:** Stage 2 implementation. All fifteen Stage 1 features (F01–F15)
+> work through both the CLI and the GUI. A few options are CLI-only:
+> removing annotations, naming the paragraphs to compare, and resetting
+> the whole reader profile. Answers depend on a language model
+> (see below); without one, passages are still found but nothing is
+> explained. The collaboration log (`docs/collaboration-log.md`) records known
+> limitations.
 
 ## Prerequisites
 
@@ -56,6 +57,11 @@ The window has a page per area, chosen on the left:
   one ten paragraphs at a time (progress is recorded in your profile), and
   ask for an AI annotation of a paragraph. Annotations are kept and shown
   under their paragraph, set apart from the author's words.
+- **News** (F01, F02): fetch the latest news from the feeds, or show what
+  is stored; events are grouped from several outlets, each with an AI
+  summary. Open an event for its reports, background from the library and
+  an AI account, then research it, compare its outlets, trace its
+  history or save it.
 - **Research** (F03, F04, F07–F09, F11, F12, F14): choose what to do (ask a
   question, research in several steps, trace the history, Marxist
   analysis, compare leftist traditions, recommend readings, build a
@@ -65,6 +71,12 @@ The window has a page per area, chosen on the left:
 - **Past research** (F03, F10–F12): every research run, to reopen as it was
   left, continue with a new focus, or follow up with an analysis, a
   comparison of the texts behind it, or a comparison of traditions.
+- **Compare** (F10): tick two to four texts and name a subject; earlier
+  comparisons are listed to reopen.
+- **Workspace** (F15): everything you saved (texts, paragraphs, answers,
+  research, events, notes), to search, add notes to, or remove.
+  "Continue" goes back to where the item came from: a text opens where you
+  stopped reading. Save buttons are on the Library, Research and News pages.
 - **Learning paths** (F08): stored paths; mark a step done, already known
   or skipped. Done and known steps are added to your reader model.
 - **Profile** (F13, F14): what the system believes you know and where each

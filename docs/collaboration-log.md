@@ -471,3 +471,19 @@ platform.openai.com.
   - Marking a learning-path step in the GUI publishes `PrerequisiteMarkedKnown`, as `path mark` does, so the GUI and CLI update the reader model the same way (Observer).
 - **Human contribution:** None on this slice yet; the code has not been reviewed.
 - **Outcome:** Three code commits, this documentation commit and one earlier interim log commit.
+
+### 2026-11-22 — Graphical interface, third slice: news, compare and workspace
+
+- **Task:** Complete the GUI: the news dashboard and event view (F01, F02), comparing chosen texts (F10), and the workspace (F15), with saving from the other pages.
+- **Input/Instruction:** Fifth of the five slices requested.
+- **AI contribution:** Added `praxis/gui/news.py` (`NewsController`, `NewsView`: fetch or show the dashboard, open an event, then research it, compare its outlets, trace its history or save it), `compare.py` (`CompareController`, `CompareView`: tick two to four texts, name the subject, reopen earlier comparisons), `workspace.py` (`WorkspaceController`, `WorkspaceView`, `Resume`: list, filter, search, notes, removal, and "Continue" back to the page an item came from), renderers for event cards, expanded events and comparisons in `results.py`, and `widgets.item_list`. Save buttons were added to the library page (text, paragraph) and the research page (answers and research results). The GUI test fixture now gives the application no news feeds unless a test passes some, so no test reaches the real feeds. 793 automated tests. The README now says all fifteen features work through both interfaces, and lists the options that remain CLI-only. Live run of the news page against the real feeds and `gpt-5-mini` on the scratch database, on a worker thread, offscreen: fetching and the dashboard took 165 s (12 of 79 events, 32 reports, each with an AI summary). Opening the first event (COP31) took 47 s; its account's claim that "the EU, the UK and some allies in the developing world" rejected the text is in the cited Guardian report. Both views were rendered to images and looked at.
+- **Problems met:**
+  - In the live run the multi-line event cards ran together in the list. Lists whose entries span lines are now shaded alternately and spaced (`widgets.item_list`), in its own commit.
+  - The event's library background was two passages matched by keyword only: Luxemburg on diplomats vetoing Turkey's affairs (¶1632 of *The Accumulation of Capital*) and Trotsky on Soviet Russia's lack of coal and oil. This is F02's existing retrieval, not something the GUI added. Not changed.
+  - AI-written tests assumed opening an event makes one model call (it makes two: search terms, then the account) and that a saved event's title is the headline (it is "Event: …"). Both were corrected against the code before commit.
+- **Design changes from Stage 1 introduced here:**
+  - Stage 1's `NewsView`/`NewsController` and `WorkspaceView`/`WorkspaceController` are pages of the main window. SD03's event actions (research, compare, history) are buttons on the opened event, as `news event --research/--compare/--history` are in the CLI.
+  - F15 had no sequence diagram in Stage 1. In the GUI, `WorkspaceController.resume` decides where a saved item continues (text and paragraph, research session, comparison or event), and the window shows that page. A saved text resumes after the furthest paragraph read; one no longer in the library shows the saved copy and says so (F15's error case), with "Continue" disabled.
+  - Saving is offered where the CLI offers `--save`, except comparisons, which are already stored and listed on the compare page.
+- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Outcome:** Four code commits and this documentation commit.
