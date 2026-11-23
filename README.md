@@ -93,10 +93,14 @@ Choose a page on the left:
 
 - **Home**: shows whether a language model is set up. On first run, press
   the button that loads the fourteen bundled texts into the library.
-- **Library**: search the texts or filter them by topic. Read a text ten
-  paragraphs at a time; your progress is saved in your profile. Ask for an
-  AI annotation of a paragraph; annotations are kept and shown under their
-  paragraph, set apart from the author's words.
+- **Library**: search the texts or filter them by topic, then click one to
+  read it. The reader fills the page and shows the whole text as one
+  scroll; how far you get is saved in your profile. Click a paragraph's
+  number (¶12) for the **Ask about** menu: pick an annotation type, and the
+  reader says it is being written, then shows it under the paragraph in its
+  own colour, apart from the author's words. Annotations are kept. The same
+  menu saves the paragraph to your workspace; **◀ Library** goes back to the
+  list.
 - **News**: fetch the latest news, or show what is already stored. Each
   event groups reports from several outlets and has an AI summary. Open an
   event for its reports, background from the library and an AI account.

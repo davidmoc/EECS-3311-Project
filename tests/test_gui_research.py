@@ -131,5 +131,5 @@ def test_a_passage_link_opens_the_text_at_its_paragraph(gui):
 
     library = window.page("Library")
     assert window.current_title == "Library"
-    assert library.page.document.id == source.citation.document_id
-    assert library.page.start == int(source.citation.locator.lstrip("¶"))
+    assert library.text.document.id == source.citation.document_id
+    assert library.opened_at == int(source.citation.locator.lstrip("¶"))

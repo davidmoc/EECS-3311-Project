@@ -43,47 +43,101 @@ def test_the_library_page_is_refreshed_after_the_home_page_loads_texts(gui):
     assert library_page(window).text_list.count() == 14
 
 
-def test_reading_a_page_records_progress_and_pages_turn(gui):
-    window, application = gui(seed=True)
+def test_only_the_list_shows_until_a_text_is_chosen(gui):
+    window, _ = gui(seed=True)
     page = library_page(window)
-    open_first_text_titled(page, "The Communist Manifesto")
+    assert not page.reading
 
+    open_first_text_titled(page, "The Communist Manifesto")
+    assert page.reading
     assert page.title.text() == "The Communist Manifesto — Karl Marx and Friedrich Engels"
-    assert page.position.text().startswith("¶1–10 of ")
-    assert "¶1" in page.reader.toPlainText()
-    assert not page.previous_button.isEnabled() and page.next_button.isEnabled()
 
-    page.next_button.click()
-
-    assert page.position.text().startswith("¶11–20 of ")
-    record = application.profiles.get_profile().history.get(page.page.document.id)
-    assert record.furthest_paragraph == 20
+    page.back_button.click()
+    assert not page.reading
 
 
-def test_an_annotation_is_shown_apart_from_the_text_and_kept(gui):
-    llm = ScriptedLLM("The passage argues that all history is class struggle.")
-    window, application = gui(llm, seed=True)
+def test_the_whole_text_is_one_scroll_and_reading_records_progress(gui):
+    window, application = gui(seed=True)
+    window.show()
     page = library_page(window)
     open_first_text_titled(page, "The Communist Manifesto")
-    page.paragraph_box.setValue(3)
-    page.type_box.setCurrentIndex(page.type_box.findData(AnnotationType.ARGUMENT))
+    shown = page.reader.toPlainText()
+    total = page.text.total
 
-    page.annotate_button.click()
+    assert shown.startswith("¶1")
+    assert f"¶{total}  " in shown  # the last paragraph too: no pages to turn
+    record = application.profiles.get_profile().history.get(page.text.document.id)
+    assert record.furthest_paragraph == 1
 
-    shown = page.annotation.toPlainText()
-    assert "AI annotation: argument" in shown
-    assert "all history is class struggle" in shown
-    assert "(15 model tokens)" in shown
-    assert len(application.annotations.annotations_for(page.page.document)) == 1
-    assert "Passage to annotate (¶3)" in llm.prompts[0].user
+    page.reader.verticalScrollBar().setValue(page.reader.verticalScrollBar().maximum())
+    page.record_progress(page.reader.furthest_visible())
+
+    record = application.profiles.get_profile().history.get(page.text.document.id)
+    assert record.furthest_paragraph == total
 
 
-def test_without_a_model_annotating_reports_the_error(gui):
+def test_a_text_opens_at_the_paragraph_asked_for(gui):
+    window, application = gui(seed=True)
+    window.show()
+    page = library_page(window)
+    manifesto = next(d for d in application.library.browse() if d.title == "The Communist Manifesto")
+
+    page.open_text(str(manifesto.id), 40)
+
+    assert page.opened_at == 40
+    assert page.reader.verticalScrollBar().value() > 0
+    assert application.profiles.get_profile().history.get(manifesto.id).furthest_paragraph >= 40
+
+
+def ask(page, paragraph, annotation_type):
+    menu = page.paragraph_menu(paragraph)
+    action = next(a for a in menu.actions() if a.data() is annotation_type)
+    action.trigger()
+
+
+def test_a_paragraph_menu_offers_every_annotation_type(gui):
     window, _ = gui(seed=True)
     page = library_page(window)
     open_first_text_titled(page, "The Communist Manifesto")
 
-    page.annotate_button.click()
+    labels = [a.text().strip() for a in page.paragraph_menu(3).actions() if a.text()]
 
-    assert page.annotation.toPlainText().startswith("Error:")
-    assert page.annotate_button.isEnabled()
+    assert labels[0] == "Ask about ¶3"
+    assert [a.data() for a in page.paragraph_menu(3).actions() if a.data()] == list(AnnotationType)
+    assert labels[-1] == "Save paragraph to workspace"
+
+
+def test_a_requested_annotation_shows_as_pending_then_inline(gui):
+    llm = ScriptedLLM("The passage argues that all history is class struggle.")
+    window, application = gui(llm, seed=True)
+    page = library_page(window)
+    open_first_text_titled(page, "The Communist Manifesto")
+    pending = []
+    page.reader.textChanged.connect(lambda: pending.append("Asking about the argument of ¶3…" in page.reader.toPlainText()))
+
+    ask(page, 3, AnnotationType.ARGUMENT)
+
+    assert pending[0]  # shown while the request ran
+    shown = page.reader.toPlainText()
+    assert "Asking about" not in shown
+    assert "AI annotation · argument" in shown
+    assert shown.index("all history is class struggle") < shown.index("¶4  ")
+    assert "(15 model tokens)" in page.message.text()
+    assert len(application.annotations.annotations_for(page.text.document)) == 1
+    assert "Passage to annotate (¶3)" in llm.prompts[0].user
+
+    page.back_button.click()
+    open_first_text_titled(page, "The Communist Manifesto")
+    assert "all history is class struggle" in page.reader.toPlainText()  # kept
+
+
+def test_without_a_model_asking_reports_the_error_under_the_paragraph(gui):
+    window, _ = gui(seed=True)
+    page = library_page(window)
+    open_first_text_titled(page, "The Communist Manifesto")
+
+    ask(page, 2, AnnotationType.TERMINOLOGY)
+
+    shown = page.reader.toPlainText()
+    assert "✕ Error:" in shown
+    assert shown.index("✕ Error:") < shown.index("¶3  ")

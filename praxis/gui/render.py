@@ -10,7 +10,6 @@ from __future__ import annotations
 import re
 
 from praxis.agent.corpus import Source
-from praxis.documents import Annotation, Document, Passage
 
 # Characters Markdown would read as formatting.
 _SPECIAL = re.compile(r"([\\`*_\[\]#<>|])")
@@ -98,33 +97,3 @@ def sources(
 
 def join(*parts: str) -> str:
     return "\n\n".join(part for part in parts if part)
-
-
-def paragraphs(document: Document, shown: list[Passage], annotations: dict) -> str:
-    """The author's paragraphs, each headed by its number, with any stored
-    annotations below it, set apart as AI commentary."""
-    parts = []
-    for passage in shown:
-        text = passage.text if document.can_reproduce() else document.cite(passage).quoted_text
-        parts.append(f"**{escape(passage.locator)}**  {escape(text)}")
-        for annotation in annotations.get(passage.id, []):
-            parts.append(annotation_markdown(annotation))
-    return "\n\n".join(parts)
-
-
-def annotation_markdown(annotation: Annotation) -> str:
-    label = f"AI annotation: {annotation.type.label}"
-    if annotation.personalized:
-        label += ", adapted to your reader profile"
-    body = "\n".join(f"> {row}" if row.strip() else ">" for row in annotation.content.strip().splitlines())
-    parts = [f"> ✎ ***{escape(label)}***\n>\n{body}"]
-    if annotation.uncertainties:
-        parts.append("> **Could not be verified:**\n" + "\n".join(
-            f"> - {escape(note)}" for note in annotation.uncertainties
-        ))
-    if annotation.sources:
-        parts.append("\n".join(
-            f"> {escape(f'[{number}]')} {escape(citation.format())}"
-            for number, citation in enumerate(annotation.sources, start=1)
-        ))
-    return "\n>\n".join(parts)

@@ -24,7 +24,7 @@ def test_inferred_knowledge_is_shown_with_its_origin_and_can_be_corrected(gui):
     library = window.show_page("Library")
     letter = application.library.browse("imperialism")
     letter = next(d for d in letter if d.title == "A Letter to American Workingmen")
-    library.open_text(str(letter.id), start=10_000)  # the last page: finishing infers knowledge
+    library.open_text(str(letter.id), 10_000)  # the end: finishing infers knowledge
     page = window.show_page("Profile")
 
     inferred = [row for row in rows(page.knowledge) if row[2].startswith("inferred")]

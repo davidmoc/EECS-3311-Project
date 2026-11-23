@@ -24,9 +24,7 @@ def open_row(page, row):
 def test_a_saved_paragraph_continues_at_that_paragraph(gui):
     window, application = gui(seed=True)
     library, manifesto = manifesto_page(window, application, 11)
-    library.paragraph_box.setValue(13)
-
-    library.save_paragraph_button.click()
+    library.paragraph_menu(13).actions()[-1].trigger()  # "Save paragraph to workspace"
 
     assert library.message.text().startswith("Saved to your workspace: Karl Marx and Friedrich Engels")
     page = workspace(window)
@@ -38,19 +36,19 @@ def test_a_saved_paragraph_continues_at_that_paragraph(gui):
     page.continue_button.click()
 
     assert window.current_title == "Library"
-    assert library.page.start == 13
+    assert library.opened_at == 13
 
 
 def test_a_saved_text_continues_where_reading_stopped(gui):
     window, application = gui(seed=True)
-    library, _ = manifesto_page(window, application, 21)  # read to ¶30
+    library, _ = manifesto_page(window, application, 30)  # read to ¶30
     library.save_text_button.click()
     page = workspace(window)
     open_row(page, 0)
 
     page.continue_button.click()
 
-    assert library.page.start == 31
+    assert library.opened_at == 31
 
 
 def test_research_is_saved_and_continued_on_the_past_research_page(gui):

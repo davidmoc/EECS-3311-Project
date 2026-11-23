@@ -1,42 +1,45 @@
 """The library page: find texts (F05), read them, and ask for AI
 annotations of a paragraph (F06).
 
-Stage 1's ``LibraryView`` and ``ReaderView`` share one page here: the list
-of texts on the left, the reader on the right. ``LibraryController`` finds
-texts; ``ReadingController`` opens pages of a text, which records reading
-progress through the ``LearningEventBus`` (F13), and requests annotations.
+Stage 1's ``LibraryView`` and ``ReaderView`` share one page here, one at a
+time: the list of texts until one is chosen, then the reader, which fills
+the page. ``LibraryController`` finds texts; ``ReadingController`` opens
+them, records how far the reader got through the ``LearningEventBus``
+(F13), and requests annotations.
+
+In the reader, clicking a paragraph's number opens the "Ask about" menu of
+annotation types. The request runs in the background; the reader shows that
+it is running under the paragraph, then the annotation in its place.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from uuid import UUID
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidgetItem,
+    QMenu,
     QPushButton,
-    QSpinBox,
-    QSplitter,
-    QTextBrowser,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from praxis.app import Application
-from praxis.documents import Annotation, AnnotationType, Document, Passage
-from praxis.gui import render
+from praxis.documents import Annotation, AnnotationType, Document
+from praxis.gui.reader import ReaderPane, ReaderText
 from praxis.gui.tasks import TaskRunner, describe_error
 from praxis.gui.widgets import item_list, lock_while_busy
 from praxis.reader_model.events import DocumentRead
 from praxis.reader_model.personalization import RequestPreferences
 from praxis.reading import AnnotationResult
 
-PAGE_SIZE = 10
 ALL_TOPICS = "All topics"
 
 
@@ -55,36 +58,21 @@ class LibraryController:
         return self._library.topics()
 
 
-@dataclass(frozen=True)
-class ReaderPage:
-    document: Document
-    passages: list[Passage]
-    start: int  # number of the first paragraph shown
-    total: int
-    annotations: dict[UUID, list[Annotation]] = field(default_factory=dict)
-
-    @property
-    def end(self) -> int:
-        return self.start + len(self.passages) - 1
-
-
 class ReadingController:
     def __init__(self, application: Application) -> None:
         self._application = application
 
-    def open_page(self, document_id: UUID | str, start: int = 1, count: int = PAGE_SIZE) -> ReaderPage:
-        """Paragraphs ``start`` to ``start + count - 1``. Reading them is
-        recorded as progress, as ``library read`` does."""
+    def open_text(self, document_id: UUID | str) -> ReaderText:
+        """The whole text, with the annotations stored for it."""
         document = self._application.library.get_document(document_id)
-        passages = document.passages()
-        start = max(1, min(start, len(passages) or 1))
-        shown = passages[start - 1 : start - 1 + count]
-        if shown:
-            self._application.events.publish(DocumentRead(document, start - 1 + len(shown)))
         by_passage: dict[UUID, list[Annotation]] = {}
         for annotation in self._application.annotations.annotations_for(document):
             by_passage.setdefault(annotation.passage_id, []).append(annotation)
-        return ReaderPage(document, shown, start, len(passages), by_passage)
+        return ReaderText(document, document.passages(), by_passage)
+
+    def record_progress(self, document: Document, paragraph: int) -> None:
+        """The reader reached ``paragraph``, as ``library read`` records."""
+        self._application.events.publish(DocumentRead(document, paragraph))
 
     def save_text(self, document: Document):
         return self._application.workspace.save_document(document)
@@ -113,85 +101,74 @@ class LibraryView(QWidget):
         self._library = library
         self._reading = reading
         self._runner = runner
-        self.page: ReaderPage | None = None
+        self.text: ReaderText | None = None
+        self.opened_at = 0  # the paragraph the open text was opened at
+        self._recorded = 0  # furthest paragraph recorded for the open text
 
-        # Left: finding texts.
+        # The list of texts.
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search the library…")
         self.search_box.returnPressed.connect(self.search)
         self.topic_box = QComboBox()
         self.topic_box.currentIndexChanged.connect(self.filter_by_topic)
+        filters = QHBoxLayout()
+        filters.addWidget(self.search_box, stretch=3)
+        filters.addWidget(self.topic_box, stretch=1)
         self.text_list = item_list()
         self.text_list.itemActivated.connect(self._open_item)
         self.text_list.itemClicked.connect(self._open_item)
-        left = QWidget()
-        left_layout = QVBoxLayout(left)
-        left_layout.addWidget(self.search_box)
-        left_layout.addWidget(self.topic_box)
-        left_layout.addWidget(self.text_list)
+        self.list_message = QLabel()
+        self.list_message.setWordWrap(True)
+        shelf = QWidget()
+        shelf_layout = QVBoxLayout(shelf)
+        shelf_layout.addLayout(filters)
+        shelf_layout.addWidget(self.text_list, stretch=1)
+        shelf_layout.addWidget(self.list_message)
 
-        # Right: the reader.
-        self.title = QLabel("Choose a text to read.")
+        # The reader.
+        self.back_button = QPushButton("◀ Library")
+        self.back_button.clicked.connect(self.show_list)
+        self.title = QLabel()
         self.title.setWordWrap(True)
         self.title.setTextFormat(Qt.TextFormat.PlainText)
-        self.reader = QTextBrowser()
-        self.previous_button = QPushButton("◀ Previous")
-        self.previous_button.clicked.connect(lambda: self.turn(-PAGE_SIZE))
-        self.next_button = QPushButton("Next ▶")
-        self.next_button.clicked.connect(lambda: self.turn(PAGE_SIZE))
+        self.title.setStyleSheet("font-size: 16px; font-weight: 700;")
         self.position = QLabel()
-        pages = QHBoxLayout()
-        pages.addWidget(self.previous_button)
-        pages.addWidget(self.position, stretch=1)
-        pages.addWidget(self.next_button)
-
-        self.paragraph_box = QSpinBox()
-        self.paragraph_box.setPrefix("¶")
-        self.type_box = QComboBox()
-        for annotation_type in AnnotationType:
-            self.type_box.addItem(annotation_type.label, annotation_type)
-        self.annotate_button = QPushButton("Annotate (AI)")
-        self.annotate_button.clicked.connect(self.annotate)
-        annotate_row = QHBoxLayout()
-        annotate_row.addWidget(QLabel("Annotate paragraph"))
-        annotate_row.addWidget(self.paragraph_box)
-        annotate_row.addWidget(self.type_box)
-        annotate_row.addWidget(self.annotate_button)
-        self.save_paragraph_button = QPushButton("Save paragraph")
-        self.save_paragraph_button.clicked.connect(self.save_paragraph)
         self.save_text_button = QPushButton("Save text")
         self.save_text_button.clicked.connect(self.save_text)
-        annotate_row.addStretch()
-        annotate_row.addWidget(self.save_paragraph_button)
-        annotate_row.addWidget(self.save_text_button)
-        self.annotation = QTextBrowser()
-        self.annotation.setMaximumHeight(260)
+        header = QHBoxLayout()
+        header.addWidget(self.back_button)
+        header.addWidget(self.title, stretch=1)
+        header.addWidget(self.position)
+        header.addWidget(self.save_text_button)
+        self.reader = ReaderPane()
+        self.reader.paragraph_clicked.connect(self._paragraph_clicked)
+        self.reader.reached.connect(self.record_progress)
         self.message = QLabel()
         self.message.setWordWrap(True)
+        self.message.hide()
+        reading = QWidget()
+        reading_layout = QVBoxLayout(reading)
+        reading_layout.setContentsMargins(0, 0, 0, 0)
+        reading_layout.addLayout(header)
+        reading_layout.addWidget(self.reader, stretch=1)
+        reading_layout.addWidget(self.message)
 
-        right = QWidget()
-        right_layout = QVBoxLayout(right)
-        right_layout.addWidget(self.title)
-        right_layout.addWidget(self.reader, stretch=1)
-        right_layout.addLayout(pages)
-        right_layout.addLayout(annotate_row)
-        right_layout.addWidget(self.annotation)
-        right_layout.addWidget(self.message)
-
-        splitter = QSplitter()
-        splitter.addWidget(left)
-        splitter.addWidget(right)
-        splitter.setStretchFactor(1, 3)
+        self._views = QStackedWidget()
+        self._views.addWidget(shelf)
+        self._views.addWidget(reading)
         layout = QVBoxLayout(self)
-        layout.addWidget(splitter)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._views)
 
-        lock_while_busy(
-            runner, self.search_box, self.topic_box, self.text_list,
-            self.previous_button, self.next_button, self.annotate_button,
-            self.save_paragraph_button, self.save_text_button,
-        )
+        lock_while_busy(runner, self.search_box, self.topic_box, self.text_list, self.save_text_button)
+        # Progress is not written while a request uses the database; catch up after.
+        runner.busy_changed.connect(lambda busy: busy or self.record_progress(self.reader.furthest_visible()))
         self.refresh()
-        self._update_controls()
+
+    @property
+    def reading(self) -> bool:
+        """Whether the reader, not the list, is showing."""
+        return self._views.currentIndex() == 1
 
     # --- finding texts ---------------------------------------------------------
 
@@ -217,93 +194,135 @@ class LibraryView(QWidget):
             item = QListWidgetItem(f"{document.title}{year}\n{document.author}")
             item.setData(Qt.ItemDataRole.UserRole, str(document.id))
             self.text_list.addItem(item)
-        if not documents:
-            self.message.setText("No text matches.")
-        else:
-            self.message.clear()
+        self.list_message.setText("" if documents else "No text matches.")
+
+    def show_list(self) -> None:
+        self.record_progress(self.reader.furthest_visible())
+        self._views.setCurrentIndex(0)
 
     # --- reading ---------------------------------------------------------------
 
     def _open_item(self, item: QListWidgetItem) -> None:
         self.open_text(item.data(Qt.ItemDataRole.UserRole))
 
-    def open_text(self, document_id: str, start: int = 1) -> None:
+    def open_text(self, document_id: str, paragraph: int = 1) -> None:
+        """Show the text at ``paragraph``, which counts as read so far."""
         if self._runner.busy:
+            self._say("Wait for the current request to finish.")
             return
         try:
-            self.page = self._reading.open_page(document_id, start)
+            text = self._reading.open_text(document_id)
         except Exception as exc:
-            self.message.setText(f"Error: {describe_error(exc)}")
+            self.list_message.setText(f"Error: {describe_error(exc)}")
+            self._say(f"Error: {describe_error(exc)}")
             return
-        page = self.page
-        self.title.setText(f"{page.document.title} — {page.document.author}")
-        self.reader.setMarkdown(render.paragraphs(page.document, page.passages, page.annotations))
-        self.position.setText(
-            f"¶{page.start}–{page.end} of {page.total}" if page.passages else "No paragraphs."
+        self.text = text
+        self._recorded = 0
+        self.title.setText(f"{text.document.title} — {text.document.author}")
+        self.position.setText(f"{text.total} paragraphs" if text.total else "No paragraphs.")
+        self._say("")
+        self._views.setCurrentIndex(1)
+        paragraph = max(1, min(paragraph, text.total or 1))
+        self.opened_at = paragraph
+        self.reader.show_text(text, paragraph)
+        self.record_progress(paragraph)
+
+    def record_progress(self, paragraph: int) -> None:
+        """Record ``paragraph`` as reached, if it is further than before."""
+        text = self.text
+        if text is None or not text.passages or self._runner.busy:
+            return
+        paragraph = min(paragraph, text.total)
+        if paragraph <= self._recorded:
+            return
+        self._recorded = paragraph
+        self.position.setText(f"¶{paragraph} of {text.total}")
+        try:
+            self._reading.record_progress(text.document, paragraph)
+        except Exception as exc:
+            self._say(f"Progress was not recorded: {describe_error(exc)}")
+
+    # --- the "Ask about" menu (F06) and saving (F15) ---------------------------
+
+    def paragraph_menu(self, paragraph: int) -> QMenu:
+        """What can be done with ``paragraph``: ask for an annotation of
+        each type, or save it."""
+        menu = QMenu(self)
+        busy = self._runner.busy
+        header = menu.addAction(f"Ask about ¶{paragraph}" + (" (wait for the current request)" if busy else ""))
+        header.setEnabled(False)
+        for annotation_type in AnnotationType:
+            action = menu.addAction(f"    {annotation_type.label.capitalize()}")
+            action.setData(annotation_type)
+            action.setEnabled(not busy)
+            action.triggered.connect(lambda _=False, t=annotation_type: self.ask(paragraph, t))
+        menu.addSeparator()
+        save = menu.addAction("Save paragraph to workspace")
+        save.setEnabled(not busy)
+        save.triggered.connect(lambda: self.save_paragraph(paragraph))
+        return menu
+
+    def _paragraph_clicked(self, paragraph: int) -> None:
+        self.paragraph_menu(paragraph).exec(QCursor.pos())
+
+    def ask(self, paragraph: int, annotation_type: AnnotationType) -> None:
+        """Request an annotation; the reader shows it is on its way, then
+        shows it under the paragraph."""
+        text = self.text
+        if text is None:
+            return
+        document = text.document
+        text.failed.pop(paragraph, None)
+        text.pending[paragraph] = annotation_type
+        self.reader.rerender()
+
+        def finish() -> None:
+            text.pending.pop(paragraph, None)
+            if self.text is text:  # still the text on screen
+                self.reader.rerender()
+
+        def done(result: AnnotationResult) -> None:
+            if result.annotation is not None:
+                text.annotations.setdefault(result.annotation.passage_id, []).append(result.annotation)
+            else:
+                text.failed[paragraph] = "No annotation was written: " + " ".join(result.limitations)
+            notes = list(result.warnings)
+            if result.tokens_used:
+                notes.append(f"({result.tokens_used} model tokens)")
+            self._say(" ".join(notes))
+            finish()
+
+        def failed(exc: Exception) -> None:
+            text.failed[paragraph] = f"Error: {describe_error(exc)}"
+            finish()
+
+        started = self._runner.run(
+            f"Asking about the {annotation_type.label} of ¶{paragraph}",
+            lambda: self._reading.annotate(document, paragraph, annotation_type),
+            done, failed,
         )
-        self.paragraph_box.setRange(page.start, max(page.end, page.start))
-        self.paragraph_box.setValue(page.start)
-        self.annotation.clear()
-        self.message.clear()
-        self._update_controls()
-
-    def turn(self, by: int) -> None:
-        if self.page is not None:
-            self.open_text(str(self.page.document.id), self.page.start + by)
-
-    def _update_controls(self) -> None:
-        page = self.page
-        self.previous_button.setEnabled(page is not None and page.start > 1)
-        self.next_button.setEnabled(page is not None and page.end < page.total)
-        self.annotate_button.setEnabled(page is not None and bool(page.passages))
-        self.save_paragraph_button.setEnabled(page is not None and bool(page.passages))
-        self.save_text_button.setEnabled(page is not None)
-
-    # --- saving (F15) -----------------------------------------------------------
+        if not started:
+            text.pending.pop(paragraph, None)
+            self.reader.rerender()
 
     def save_text(self) -> None:
-        if self.page is not None:
-            self._save(lambda: self._reading.save_text(self.page.document))
+        if self.text is not None:
+            document = self.text.document
+            self._save(lambda: self._reading.save_text(document))
 
-    def save_paragraph(self) -> None:
-        if self.page is not None:
-            paragraph = self.paragraph_box.value()
-            self._save(lambda: self._reading.save_paragraph(self.page.document, paragraph))
+    def save_paragraph(self, paragraph: int) -> None:
+        if self.text is not None:
+            document = self.text.document
+            self._save(lambda: self._reading.save_paragraph(document, paragraph))
 
     def _save(self, action) -> None:
         try:
             saved = action()
         except Exception as exc:
-            self.message.setText(f"Error: {describe_error(exc)}")
+            self._say(f"Error: {describe_error(exc)}")
             return
-        self.message.setText(f"Saved to your workspace: {saved.title}")
+        self._say(f"Saved to your workspace: {saved.title}")
 
-    # --- annotating (F06) ------------------------------------------------------
-
-    def annotate(self) -> None:
-        if self.page is None:
-            return
-        page = self.page
-        paragraph = self.paragraph_box.value()
-        annotation_type = self.type_box.currentData()
-
-        def done(result: AnnotationResult) -> None:
-            if result.annotation is not None:
-                text = render.annotation_markdown(result.annotation)
-            else:
-                text = "**No annotation was written:**\n\n" + "\n".join(
-                    render.line(limitation) for limitation in result.limitations
-                )
-            self.annotation.setMarkdown(render.join(text, render.warnings(result.warnings, result.tokens_used)))
-            self._update_controls()
-
-        def failed(exc: Exception) -> None:
-            self.annotation.setMarkdown(f"**Error:** {render.escape(describe_error(exc))}")
-            self._update_controls()
-
-        self.annotation.setMarkdown(f"*Asking for a {annotation_type.label} annotation of ¶{paragraph}…*")
-        self._runner.run(
-            f"Annotating ¶{paragraph}",
-            lambda: self._reading.annotate(page.document, paragraph, annotation_type),
-            done, failed,
-        )
+    def _say(self, text: str) -> None:
+        self.message.setText(text)
+        self.message.setVisible(bool(text))
