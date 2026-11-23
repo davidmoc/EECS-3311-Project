@@ -121,3 +121,16 @@ def test_citations_removed_at_the_end_leave_no_stray_commas():
         "movements (Chartism, socialism)",
         "superseding of small masters and family independence",
     ]
+
+
+def test_a_headed_alternative_or_limit_is_split_at_the_bar():
+    # A live analysis headed its alternatives and limits "label | text",
+    # which were printed with the bar.
+    parsed = parse_analysis(
+        "alternative: reformist reading of the Poor Law | a response to fiscal crisis [3]\n"
+        "limit: commodity fetishism | the passages offer little on it"
+    )
+
+    alternative = parsed.items[0]
+    assert (alternative.label, alternative.text) == ("reformist reading of the Poor Law", "a response to fiscal crisis")
+    assert parsed.limits == ("commodity fetishism: the passages offer little on it",)

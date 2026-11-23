@@ -137,7 +137,10 @@ def parse_analysis(text: str) -> ParsedAnalysis | None:
         readable = True
         name, body = match[1].lower(), match[2]
         if name == "limit":
-            limits.append(strip_citations(body))
+            # The model sometimes heads a limit "concept | why"; show it as
+            # "concept: why" rather than with a bare bar.
+            head, bar, rest = strip_citations(body).partition("|")
+            limits.append(f"{head.strip()}: {rest.strip()}" if bar else head.strip())
             continue
         kind = AnalysisItemKind(name)
         if counts.get(kind, 0) >= MAX_LINES_PER_KIND:
@@ -146,10 +149,9 @@ def parse_analysis(text: str) -> ParsedAnalysis | None:
         evidence = tuple(cited_numbers(body))
         clean = strip_citations(body)
         label = ""
-        if kind is not AnalysisItemKind.ALTERNATIVE:
-            head, bar, rest = clean.partition("|")
-            if bar:
-                label, clean = head.strip(), rest.strip()
+        head, bar, rest = clean.partition("|")
+        if bar:  # an alternative may be headed too, though its form has no label
+            label, clean = head.strip(), rest.strip()
         if kind is AnalysisItemKind.CLAIM:
             label = "supported" if label.lower() == "supported" else "tentative"
         elif kind is AnalysisItemKind.CONDITION:
