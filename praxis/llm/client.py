@@ -40,3 +40,15 @@ class LLMClient(ABC):
     @abstractmethod
     def generate(self, prompt: Prompt) -> LLMResponse:
         """Return the model's response, or raise ``LLMError``."""
+
+
+class WebSearchClient(ABC):
+    """A model that can search the web while it answers.
+
+    Kept apart from ``LLMClient`` because not every provider offers it,
+    and because it is slower and dearer: only source discovery uses it.
+    """
+
+    @abstractmethod
+    def search(self, prompt: Prompt) -> LLMResponse:
+        """Return the model's answer after searching, or raise ``LLMError``."""
