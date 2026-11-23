@@ -203,10 +203,13 @@ def suggested_readings(cited: tuple[Source, ...]) -> tuple[SuggestedReading, ...
 
 def strip_citations(text: str) -> str:
     """``text`` without its ``[n]`` marks, and without the punctuation
-    they leave stranded: "socialism), [11]" becomes "socialism)", and
-    "independence, [13], " no longer ends in ",,"."""
+    they leave stranded: "socialism), [11]" becomes "socialism)",
+    "independence, [13], " no longer ends in ",,", and "machine ([23],
+    [31]) explains" becomes "machine explains"."""
     stripped = _CITATIONS.sub("", text)
-    stripped = re.sub(r"\(\s*\)", "", stripped)
+    # Brackets left holding nothing, or only the commas between citations.
+    stripped = re.sub(r"\(\s*(?:[,;]\s*)*\)", "", stripped)
+    stripped = re.sub(r"\s{2,}", " ", stripped)
     stripped = re.sub(r"\s+([.,;:])", r"\1", stripped)
     stripped = re.sub(r"([,;:])(?:\s*[,;:])+", r"\1", stripped)
     return stripped.strip().rstrip(",;:").rstrip()

@@ -134,3 +134,16 @@ def test_a_headed_alternative_or_limit_is_split_at_the_bar():
     alternative = parsed.items[0]
     assert (alternative.label, alternative.text) == ("reformist reading of the Poor Law", "a response to fiscal crisis")
     assert parsed.limits == ("commodity fetishism: the passages offer little on it",)
+
+
+def test_brackets_holding_only_citations_are_removed_with_them():
+    # A live analysis printed "machine (,) explains" and "conservative  applied".
+    parsed = parse_analysis(
+        "application: the state | the State as a machine ([23], [31]) explains it [7].\n"
+        "application: petty bourgeoisie | petty traders are conservative [11] applied to 1848 [5]."
+    )
+
+    assert [i.text for i in parsed.items] == [
+        "the State as a machine explains it.",
+        "petty traders are conservative applied to 1848.",
+    ]
