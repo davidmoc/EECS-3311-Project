@@ -538,3 +538,18 @@ platform.openai.com.
   - UC08's gap case ("If no appropriate reading exists…") now applies only when nothing is found on the web either.
 - **Human contribution:** Reported the problem and set the goal.
 - **Outcome:** Two code commits and this documentation commit.
+
+### 2026-11-23 — Structured result panes
+
+- **Task:** Make the results the model produces (research, news, learning paths and the rest) easier to follow and use.
+- **Input/Instruction:** The user said every page that shows a structured response from the LLM felt janky because it was all raw text, and asked for them to be developed to be easier to follow and use. The design was left to the AI.
+- **AI contribution:** Rewrote `praxis/gui/render.py` as rich-text building blocks (cards, AI boxes, badges, sections, a "Jump to" bar, a progress bar, citation links) and `praxis/gui/results.py` on top of them, replacing the Markdown renderers. Passages and news reports are white serif cards with an Open link; model output is a tinted box labelled AI-generated, in the reader's annotation colours; `[n]` citations in model text link to passage n, and `widgets.result_browser` scrolls to it, opens web links in the browser and hands other links to the page. History's chronology is a date table; analysis claims carry Supported/Tentative badges; comparisons mark each finding with its sources' letters. Research, history, analysis, traditions and comparisons show findings before passages; a plain question (F04) keeps its passages first. The News page's event list is now a `CardList` of clickable cards with a shortened summary and grouping warnings. On the Learning paths page each step has Mark done / I already know this / Skip / Undo links, replacing the step spin box and status menu; settled steps fold to one line and the path shows a progress bar and its next step. A path built on the Research page links to its page. Moved `markdown_html` from `reader.py` to `render.py`. Updated the README. 827 automated tests (new: undoing a step, the Research→Learning paths link, a citation scrolling to its passage). The pages were rendered offscreen from a copy of the real database and looked at before and after.
+- **Problems met:**
+  - The first render of the news cards had overlapping text: cards in a scrolling list kept the default "Maximum" height policy, which squeezes word-wrapped labels. Cards in a `CardList` now grow to fit.
+  - The progress bar's empty part did not draw, because Qt gives an empty table cell no height; each cell now holds a tiny space.
+  - Tests that matched the old wording (and drove the removed spin box) were updated; the citation-scroll test has to show the window, as an unshown pane cannot scroll.
+- **Design changes from Stage 1 introduced here:**
+  - UC08 step 7 (recording progress) now happens from the step itself rather than a separate form; the service call and the `PrerequisiteMarkedKnown` event are unchanged.
+  - Multi-source results now lead with the AI findings, each linking down to its passages, rather than listing every passage first; F04 answers still lead with their passages.
+- **Human contribution:** Reported the problem and set the goal.
+- **Outcome:** One code commit and this log entry.
