@@ -41,6 +41,7 @@ from praxis.reading import (
     RecommendationResult,
 )
 from praxis.research import ResearchBudget, ResearchError
+from praxis.research.history import ContextStatus, HistoricalContext, HistoryItemKind
 from praxis.research.result import ResearchResult
 from praxis.research.situation import ConcreteSituation
 from praxis.workspace import SavedItem, SavedItemKind
@@ -192,6 +193,90 @@ def _print_warnings(warnings: tuple[str, ...], tokens_used: int) -> None:
         typer.secho(f"Note: {warning}", fg=typer.colors.YELLOW)
     if tokens_used:
         typer.echo(f"({tokens_used} model tokens)")
+
+
+# --- historical context (F09) -------------------------------------------------
+
+
+@app.command("history")
+def history(
+    topic: Annotated[str, typer.Argument(help="Topic, event or period, in quotes.")],
+    broad: Annotated[bool, typer.Option("--broad", help="Trace it even if the AI judges it too broad.")] = False,
+) -> None:
+    """Trace how a situation developed: origins, stages, turning points, disputed views."""
+    with session() as application:
+        context = application.agent.explore_history(topic, allow_broad=broad)
+    _print_history(context)
+
+
+def _print_history(context: HistoricalContext) -> None:
+    if context.status is ContextStatus.TOO_BROAD:
+        typer.echo(f"“{context.topic}” covers too much to trace well from a few library passages.")
+        if context.narrower:
+            typer.echo("Narrow it, for example (AI-suggested):")
+            for topic in context.narrower:
+                typer.echo(f'  praxis history "{topic}"')
+        typer.echo(f'Or trace it anyway:  praxis history "{context.topic}" --broad')
+        _print_warnings(context.warnings, context.tokens_used)
+        return
+
+    typer.secho(f"Historical context: {context.topic}", bold=True)
+    for number, step in enumerate(context.steps, start=1):
+        mark = "✗" if "— failed" in step else "✓"
+        typer.echo(f"  {number}. {mark} {step}")
+    typer.echo()
+    _print_sources(context.sources, context.cited, context.purposes)
+
+    if context.status is ContextStatus.EXPLAINED:
+        label = "\nHow it developed (AI-organised from the passages"
+        label += ", adapted to your reader profile)" if context.personalized else ")"
+        typer.secho(label, bold=True)
+        if context.overview:
+            for line in textwrap.wrap(f"{context.overview} {_labels(context.overview_evidence)}", width=88):
+                typer.echo(line)
+        _print_history_items(context, HistoryItemKind.ORIGIN, "Origins")
+        chronology = [i for i in context.items if i.kind.is_dated]
+        if chronology:
+            typer.secho("\nChronology (as the passages state it)", underline=True)
+            for item in chronology:
+                turn = "turning point — " if item.kind is HistoryItemKind.TURNING_POINT else ""
+                _print_history_line(f"{item.when}: {turn}{item.text}", item.evidence)
+        _print_history_items(context, HistoryItemKind.CONTINUITY, "Continuities")
+        _print_history_items(
+            context, HistoryItemKind.INTERPRETATION,
+            "Disputed interpretations (interpretation, not established fact)",
+        )
+        if context.gaps:
+            typer.secho("\nGaps: what the passages do not cover", underline=True)
+            for gap in context.gaps:
+                _print_history_line(gap, ())
+        if context.readings:
+            typer.secho("\nRead further", bold=True)
+            for reading in context.readings:
+                times = f"cited {reading.cited} time{'s' if reading.cited != 1 else ''}"
+                typer.echo(f"  {reading.title} — {reading.author} ({times})")
+                typer.echo(
+                    f"    → praxis library read {str(reading.document_id)[:8]} --start {reading.start.lstrip('¶')}"
+                )
+    _print_warnings(context.warnings, context.tokens_used)
+
+
+def _labels(evidence: tuple[int, ...]) -> str:
+    return f"[{', '.join(str(n) for n in evidence)}]" if evidence else ""
+
+
+def _print_history_items(context: HistoricalContext, kind: HistoryItemKind, heading: str) -> None:
+    items = context.of_kind(kind)
+    if items:
+        typer.secho(f"\n{heading}", underline=True)
+        for item in items:
+            _print_history_line(item.text, item.evidence)
+
+
+def _print_history_line(text: str, evidence: tuple[int, ...]) -> None:
+    line = f"- {text} {_labels(evidence)}".rstrip()
+    for n, part in enumerate(textwrap.wrap(line, width=88)):
+        typer.echo(("  " if n else "") + part)
 
 
 # --- research (F03) ----------------------------------------------------------
@@ -588,12 +673,13 @@ def news_event(
     event_id: Annotated[str, typer.Argument(help="Event id or prefix, shown in brackets on the dashboard.")],
     research: Annotated[bool, typer.Option("--research", help="Start a research session on the event instead.")] = False,
     compare: Annotated[bool, typer.Option("--compare", help="Compare how the outlets report it instead.")] = False,
+    history: Annotated[bool, typer.Option("--history", help="Trace the event's historical background instead (F09).")] = False,
     save: Annotated[bool, typer.Option("--save", help="Save the event to your workspace.")] = False,
     tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t", help="Tag for the saved event; repeatable.")] = None,
 ) -> None:
     """Open an event: its reports, an expanded AI account, library background, related reports."""
-    if research and compare:
-        raise typer.BadParameter("Choose --research or --compare, not both.")
+    if research + compare + history > 1:
+        raise typer.BadParameter("Choose one of --research, --compare and --history.")
     with session() as application:
         news = application.news
         event = news.get_event(news.find_event(event_id))
@@ -602,6 +688,8 @@ def news_event(
             result = application.agent.research_event(event)
         elif compare:
             comparison = application.agent.compare_event_reports(event)
+        elif history:
+            context = application.agent.explore_event_history(event)
         else:
             expanded = news.get_expanded_event(event.id)
 
@@ -612,6 +700,8 @@ def news_event(
     elif compare:
         _print_comparison(comparison)
         _print_comparison_hint(comparison)
+    elif history:
+        _print_history(context)
     else:
         _print_expanded_event(expanded)
     _print_saved(saved, save)
