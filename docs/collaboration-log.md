@@ -441,3 +441,18 @@ platform.openai.com.
   - UC14's "The user can override the level of detail": `RequestPreferences` change a copy of the profile for one request and are never stored; `profile depth` and `profile personalize` remain the lasting settings. A request cannot turn personalization back on when the reader has turned it off. `--detail` is offered only where prompts use the explanation depth (questions, research synthesis, annotations).
 - **Human contribution:** None on this slice yet; the code has not been reviewed.
 - **Outcome:** Four code commits and this documentation commit.
+
+### 2026-11-22 — Graphical interface, first slice: window, library, reader and profile
+
+- **Task:** Start the GUI the Stage 2 instructions require ("a graphical user interface through which users can access the application's major functionality"). Until now everything ran through the CLI. This slice: the window and the background running of model requests, the library and reader (F05, F06) and the profile (F13, F14).
+- **Input/Instruction:** Third of the five slices requested.
+- **AI contribution:** Added `Database(shared_with_worker=True)` and PySide6 to `requirements.txt` (it was already installed in the virtual environment). Added the package `praxis/gui/`: `tasks.py` (`TaskRunner`, `ThreadTaskRunner` on one worker thread, `InlineTaskRunner` for tests), `main_window.py` (`MainWindow`: a page list and the pages, with the runner's status in the status bar), `home.py` (`HomeController`, `HomeView`), `library.py` (`LibraryController`, `ReadingController`, `LibraryView`), `profile.py` (`ProfileController`, `ProfileView`), `render.py` (results as Markdown for the text panes, the GUI's counterpart of the CLI's printing functions) and `launch.py` (`build_window`, `run`). `Application` gained `llm`. `praxis gui` and `python -m praxis.gui` open the window. 766 automated tests; the GUI tests run Qt offscreen with a scripted model. The real launcher was started offscreen against the scratch database and closed after half a second (exit code 0), and each page was rendered to an image and looked at.
+- **Problems met:**
+  - The first test of inferred knowledge opened one page of a text and expected knowledge to be inferred. Knowledge is inferred only when a text is finished (F13's updater). The test now opens the last page of Lenin's letter.
+  - An AI-written test asserted `"¶3" in prompt or "3" in prompt`, which would pass on almost any prompt. It now checks for "Passage to annotate (¶3)".
+- **Design changes from Stage 1 introduced here:**
+  - MVC as Stage 1 describes it: each page is a View (`LibraryView`, `ProfileView`) that only collects input and shows results, and its Controller (`LibraryController`, `ReadingController`, `ProfileController`) calls the same services the CLI uses, through the same `Application`. Stage 1's `ReaderView` is the right half of the library page, not a page of its own, so choosing a text and reading it happen side by side. The CLI commands play the controller role for the CLI, as before.
+  - Not in Stage 1: model calls take up to a minute, so they run on a worker thread (`ThreadTaskRunner`), with the result handed back to the GUI thread by a Qt signal. SQLite connections may not be used from two threads at once, so only one request runs at a time, and every widget that reads the database is disabled while one runs. Pages refresh when shown, except while a request runs.
+  - Reading a page in the GUI records progress through the `LearningEventBus`, as `library read` does. Resetting the whole profile is left to the CLI (`profile reset`), which asks for confirmation.
+- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Outcome:** Four code commits and this documentation commit.

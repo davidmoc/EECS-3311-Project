@@ -42,6 +42,27 @@ Then edit `.env`:
 | `OPENAI_BASE_URL` | no | Another OpenAI-compatible provider |
 | `PRAXIS_DATABASE_PATH` | no | SQLite file location (default `data/praxis.db`) |
 
+## Graphical interface
+
+```bash
+python -m praxis gui            # or: python -m praxis.gui
+```
+
+The window has a page per area, chosen on the left:
+
+- **Home**: whether a language model is configured, and a button to load
+  the fourteen bundled texts into an empty library.
+- **Library** (F05, F06): search the texts or filter them by topic, read
+  one ten paragraphs at a time (progress is recorded in your profile), and
+  ask for an AI annotation of a paragraph. Annotations are kept and shown
+  under their paragraph, set apart from the author's words.
+- **Profile** (F13, F14): what the system believes you know and where each
+  belief came from, your interests and reading; correct or remove any of
+  them, and set the explanation detail and personalization.
+
+Requests to the model run in the background, one at a time, so the window
+stays responsive; the status bar shows what is running.
+
 ## Command-line interface
 
 Run `python -m praxis --help` (or `praxis --help` after `pip install -e .`).
@@ -311,6 +332,7 @@ API key and no network access.
 | `praxis/app.py` | Composition root shared by CLI and GUI |
 | `praxis/comparison/` | `SourceComparison`, `SourceProfile`, `CompareSourcesCommand` (F10) |
 | `praxis/cli/` | Typer command-line interface |
+| `praxis/gui/` | PySide6 graphical interface: main window, views and their controllers, task runner |
 | `praxis/config.py` | Local settings and API-key handling |
 | `praxis/documents/` | Documents, passages, citations, annotations |
 | `praxis/library/` | `LibraryService`, `DocumentProvider`, Gutenberg adapter |
