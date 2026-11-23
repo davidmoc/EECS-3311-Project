@@ -160,6 +160,7 @@ def test_directory_fetcher_reads_local_copies(tmp_path):
         # As they open Gutenberg books 46423 and 41405.
         "  ------------------------------------------------\n  Transcriber’s Note:\n  +Bold text+ is enclosed within plus signs.",
         "  [Transcriber's notes:\n  Inconsistent hyphenation and use of umlauts retained.]",
+        "+----------------------+\n|Transcriber's note: |\n| Italics are _thus_. |",  # 27814
     ],
 )
 def test_volunteer_credits_at_the_start_are_dropped(credit):
@@ -173,3 +174,27 @@ def test_credit_wording_later_in_the_book_is_kept():
     raw = f"{body}\n\nProduced by the embroidery of lace."
 
     assert clean_text(raw).endswith("Produced by the embroidery of lace.")
+
+
+def test_a_transcribers_note_closing_the_book_is_dropped():
+    # Book 41405 ends with "[Transcriber's notes: List of errors: ...".
+    body = "\n\n".join(f"Paragraph {n}." for n in range(1, 9))
+    raw = f"{body}\n\n[Transcriber's notes: List of errors: Page 20 \"stook\" changed to \"stock\"]"
+
+    assert clean_text(raw).endswith("Paragraph 8.")
+
+
+def test_the_phrase_transcribers_note_mid_book_is_kept():
+    body = "\n\n".join(f"Paragraph {n}." for n in range(1, 8))
+    middle = "Transcriber's notes were how monks kept accounts, the author says."
+    raw = f"{body}\n\n{middle}\n\n{body}"
+
+    assert middle in clean_text(raw)
+
+
+def test_a_closing_box_of_corrected_misprints_is_dropped():
+    # Book 31933 ends with a boxed list of typographical corrections.
+    body = "\n\n".join(f"Paragraph {n}." for n in range(1, 9))
+    box = "+-----+\n| Typographical errors corrected in the text: |\n| Page 40: socalled replaced with so-called |"
+
+    assert clean_text(f"{body}\n\n{box}").endswith("Paragraph 8.")

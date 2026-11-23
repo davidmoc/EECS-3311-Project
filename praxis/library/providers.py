@@ -26,12 +26,13 @@ GUTENBERG_LICENSE = "Public domain (Project Gutenberg)"
 _START = re.compile(r"^\*\*\* ?START OF (THE|THIS) PROJECT GUTENBERG[^*]*\*\*\*", re.M)
 _END = re.compile(r"^\*\*\* ?END OF (THE|THIS) PROJECT GUTENBERG[^*]*\*\*\*", re.M)
 _OLD_END = re.compile(r"^End of (the )?Project Gutenberg", re.M | re.I)
-# Volunteer credits, scan notes and transcribers' notes that open some
-# e-books; not the author's words.
-_CREDIT = re.compile(
-    r"^(Produced by|E-text prepared by|Note: Images of the original pages)\b"
-    # Transcribers' notes on formatting, sometimes boxed in dashes or brackets.
-    r"|^[\s\-\[]*Transcriber[’']?s[’']? notes?\b",
+# Volunteer credits and scan notes that open some e-books; not the author's words.
+_CREDIT = re.compile(r"^(Produced by|E-text prepared by|Note: Images of the original pages)\b")
+# Transcribers' notes on formatting or corrected misprints, sometimes boxed
+# in dashes, bars or brackets. They open or close a book, so the first and
+# last few paragraphs are checked.
+_TRANSCRIBER = re.compile(
+    r"^[\s\-+|\[]*(Transcriber[’']?s[’']? notes?|Typographical errors corrected)\b",
     re.IGNORECASE,
 )
 # Credits only ever sit at the very start, so later paragraphs are not checked.
@@ -152,8 +153,10 @@ def clean_text(raw: str) -> str:
     paragraphs = re.split(r"\n\s*\n", text)
     joined = (" ".join(line.strip() for line in p.splitlines()) for p in paragraphs)
     kept = [p for p in (re.sub(r"\s+", " ", j).strip() for j in joined) if p]
+    last = len(kept) - _CREDIT_SEARCH_DEPTH
     kept = [
         p for index, p in enumerate(kept)
-        if index >= _CREDIT_SEARCH_DEPTH or not _CREDIT.match(p)
+        if not (index < _CREDIT_SEARCH_DEPTH and _CREDIT.match(p))
+        and not ((index < _CREDIT_SEARCH_DEPTH or index >= last) and _TRANSCRIBER.match(p))
     ]
     return "\n\n".join(kept)
