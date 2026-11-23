@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
 from praxis.agent.corpus import ResearchCorpus
+from praxis.documents import NewsArticle
 from praxis.reader_model import ReaderProfile
 from praxis.research.session import ResearchError, ResearchSession
 from praxis.tools import ToolManager, ToolResult
@@ -43,6 +44,9 @@ class ResearchContext:
     max_sources: int = MAX_SOURCES
     # Source number -> why it was retrieved ("evidence", "theory", "history").
     purposes: dict[int, str] = field(default_factory=dict)
+    # Leave news reports out of searches (historical context wants the
+    # library's texts, not other current news).
+    library_only: bool = False
 
     def run_tool(self, name: str, tool_input: dict[str, Any]) -> ToolResult:
         self.session.increment_tool_calls()
@@ -132,6 +136,8 @@ class _PassageRetrievalCommand(ResearchCommand):
         for match in result.items:
             if context.corpus_full:
                 break
+            if context.library_only and match.document.kind == NewsArticle.kind:
+                continue
             before = len(context.corpus)
             source = context.corpus.add_passage(match.document, match.passage)
             if len(context.corpus) > before:

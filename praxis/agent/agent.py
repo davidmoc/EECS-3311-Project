@@ -483,7 +483,9 @@ class PoliticalResearchAgent:
         searches.append(("the topic as asked", topic))
 
         session = ResearchSession(topic)
-        context = ResearchContext(session, self._tools, profile=profile, max_sources=HISTORY_SOURCES)
+        context = ResearchContext(
+            session, self._tools, profile=profile, max_sources=HISTORY_SOURCES, library_only=True
+        )
         steps = []
         if reports:
             for report in reports[:MAX_EVENT_REPORTS]:

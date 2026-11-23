@@ -147,3 +147,16 @@ def test_an_event_starts_from_its_reports_which_are_not_suggested_readings(libra
 def test_an_empty_topic_is_refused(library_database):
     with pytest.raises(AgentError):
         make_agent(library_database, None).explore_history("  ")
+
+
+def test_history_searches_leave_out_other_news(library_database):
+    # A live run on a climate summit pulled unrelated news (a court ruling,
+    # fuel imports) into the history and suggested a live blog as reading.
+    SQLDocumentRepository(library_database).save(NewsArticle(
+        title="Revolution anniversary march", author="Staff", outlet="b",
+        text="Thousands marched to mark the anniversary of the revolution in Paris.",
+        publication_date=date(2026, 11, 22),
+    ))
+    context = make_agent(library_database, ScriptedLLM(PLAN, ACCOUNT)).explore_history("revolution")
+
+    assert all(s.citation.document_title != "Revolution anniversary march" for s in context.sources)
