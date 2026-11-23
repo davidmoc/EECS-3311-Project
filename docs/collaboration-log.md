@@ -312,3 +312,25 @@ platform.openai.com.
   - `ReadingController`/`ReaderView` are played by `praxis recommend`. Saving or opening a recommended text uses the existing `workspace save-text` and `library read` commands, which the output names. Recommendations are not stored.
 - **Human contribution:** Asked for the next five slices. The code has not been reviewed yet.
 - **Outcome:** Five code commits and this documentation commit.
+
+### 2026-11-22 — Prerequisite-guided learning, first slice: building a learning path (F08)
+
+- **Task:** F08 (UC08, SD05's `buildLearningPath`): identify what a topic or text assumes, leave out what the reader knows, and give an ordered path with readings.
+- **Input/Instruction:** Second of the five slices requested.
+- **AI contribution:** Added `PREREQUISITE_RULES` and `PromptBuilder.build_prerequisite_prompt`, and `praxis/reading/prerequisites.py`: `Prerequisite`, `LearningStep`, `StepStatus`, `LearningPath`, `parse_prerequisites` and `PrerequisiteService` (`identify_prerequisites`, `build_learning_path`). In the CLI: `praxis path build [TOPIC] [--text ID]`. 626 automated tests. Two live runs against `gpt-5-mini` on the scratch database, both for *The Eighteenth Brumaire* (`--text`):
+  - Before the fixes below (39 s, 3,800 tokens): five steps, all marked "needed". The first three were the text's own catalogue topics (historical materialism, class struggle, the state), and two event steps offered the same paragraph.
+  - After them, with "class struggle" recorded as known (26 s, 3,082 tokens): five steps on the background the pamphlet assumes: the 1799 coup, the February Revolution and Second Republic, the French factions of 1848–52, Louis Bonaparte's presidency and the 1851 coup, and Bonapartism. "On the 24th of February, 1848, Louis Philippe was driven out of Paris" (¶127 of *Revolution and Counter-Revolution*) was offered for the February Revolution, which fits. The library has nothing on the 1851 coup, so that step showed the model's orientation and was reported as a gap. The orientation's dates (elected 1848, coup on 2 December 1851) are correct general history.
+- **Problems met:**
+  - Steps were marked "needed" for a reader with no recorded knowledge: the check used `ReaderProfile.is_sparse`, which also counts interests and reading progress. Steps are now required only when knowledge areas exist. Fixed in its own commit (`1c3fd6a`), with a regression test confirmed to fail before the fix.
+  - Given the target text's catalogue topics, the model listed what the text teaches as what it assumes. The text is now named by title, year and author only (`95190e4`). Regression test confirmed to fail before the fix.
+  - The same paragraph was offered for two steps; a passage is now offered by one step only. Regression test confirmed to fail before the fix.
+  - Readings are found by keyword search, and the library holds five books, so several are weak: ¶9 of *Revolution and Counter-Revolution* (a preface naming the *Brumaire*) for the 1799 coup, ¶93 (German parties) for the French factions, and two unrelated paragraphs for Bonapartism. Not changed. The path shows the excerpt beside each reading, so the reader can judge it.
+  - Two AI-written CLI tests assumed "negation" and "Hegelian dialectic" appear in no bundled text; "Hegelian" and "dialectic" do. The test uses the Physiocrats, which no bundled text mentions.
+- **Design changes from Stage 1 introduced here:**
+  - `PrerequisiteService.identifyPrerequisites(topic)` is one model call in a fixed block format (`prerequisite: <name> | <kind> | <essential|helpful>`, then `search:`, `why:`, `orientation:` lines). The reader's known topics are sent with it, so the model reuses their names, and the service filters on those names. Without a model, or on a reply in another form, no path is built (an error, as for annotations).
+  - UC08's filtering: knowledge the reader stated at introductory level or above removes a step, and is listed as left out. Knowledge only inferred from reading keeps the step, as a suggestion with a note (UC08: "If the system lacks confidence in a knowledge assessment, it presents the prerequisite as a suggestion rather than a requirement"). With no recorded knowledge, or personalization off, every step is a suggestion and the reader is told.
+  - SD05's `search(prerequisite topics)` is a `passage_search` per step, for the name and the model's keywords. Up to two passages, from different texts first, never from the target text, the news, or an earlier step.
+  - SD05's "user already knows prerequisites" branch is `LearningPath.no_path_required`: the command says no path is needed and points to the target text, or to `recommend` for a topic.
+  - `LearningPath` has an id, a creation time and a status per step, ready to be stored; storing paths and recording progress (UC08 steps 7–8) is the next slice. Until then the command points to `profile know` for steps the reader already understands.
+- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Outcome:** Six code commits and this documentation commit.

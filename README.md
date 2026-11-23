@@ -94,6 +94,10 @@ python -m praxis library read 5ce83d9c        # an article's feed summary
 python -m praxis recommend "the state"
 python -m praxis recommend                     # from your strongest interests
 
+# Learning paths (F08): the background a topic or text assumes
+python -m praxis path build "surplus value"
+python -m praxis path build --text b67c02e1     # for a library text
+
 # Source and framing comparison (F10): two to four texts, on one subject
 python -m praxis compare b67c02e1 abdc2552 --on "the peasantry"
 python -m praxis compare 59983f05:20-22 abdc2552:61,66   # named paragraphs
@@ -211,6 +215,15 @@ lacks; these are marked as not checked. Without a model the texts are
 ranked by matching passages. When little is known about you, or
 personalization is off, you are told the ranking rests on the topic alone.
 
+`path build` asks the model what the target assumes (concepts, events,
+theories, earlier texts), in learning order, and drops what you said you
+know (`profile know`). Each remaining step gets up to two library
+passages, never from the target text and never repeated across steps; a
+step the library has nothing on gets a short AI orientation and is
+reported as a gap. Steps are "needed" only when the model calls them
+essential and your knowledge is on record; knowledge inferred from your
+reading turns a step into a suggestion rather than dropping it.
+
 Reading with `library read` updates your reading progress, interests and
 inferred knowledge automatically; `profile know` always overrides inference.
 
@@ -238,7 +251,7 @@ API key and no network access.
 | `praxis/llm/` | `LLMClient` interface and the OpenAI adapter |
 | `praxis/persistence/` | SQLite database and repositories |
 | `praxis/research/` | Research session, commands, plan, planner, concrete situation, assessment method, stopping policy |
-| `praxis/reading/` | `AnnotationService` (F06), `RecommendationService` (F07) |
+| `praxis/reading/` | `AnnotationService` (F06), `RecommendationService` (F07), `PrerequisiteService` and `LearningPath` (F08) |
 | `praxis/reader_model/` | Reader profile, its service, event bus and updater |
 | `praxis/tools/` | Agent tools, tool manager and tool factory |
 | `praxis/workspace/` | Saved items, workspace and its service |
