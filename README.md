@@ -101,6 +101,11 @@ python -m praxis path list                       # every path is stored
 python -m praxis path mark 30a812b3 1 done       # or known, skip, todo
 python -m praxis path show 30a812b3
 
+# Historical context (F09): origins, chronology, disputed views, gaps
+python -m praxis history "the defeat of the 1848 revolution in Vienna"
+python -m praxis history "the history of capitalism" --broad   # trace it even if too broad
+python -m praxis news event 56eefcd0 --history   # the background of a news event
+
 # Source and framing comparison (F10): two to four texts, on one subject
 python -m praxis compare b67c02e1 abdc2552 --on "the peasantry"
 python -m praxis compare 59983f05:20-22 abdc2552:61,66   # named paragraphs
@@ -231,6 +236,16 @@ skipped. Done and known steps are published to the reader model, which
 records the topic as known at introductory level, so later paths leave it
 out.
 
+`history` asks the model whether the topic is narrow enough to trace from
+a few passages (if not, it suggests narrower topics) and for searches from
+the origins onward. It searches the library only (not other news), then
+asks the model to organise the passages into an overview, origins, a
+dated chronology with turning points marked, continuities, disputed
+interpretations (labelled as interpretation), and gaps the passages
+leave. Every item must cite a retrieved passage or it is left out. The
+texts it cites are listed to read further. `news event --history` starts
+from the event's reports and traces their background.
+
 Reading with `library read` updates your reading progress, interests and
 inferred knowledge automatically; `profile know` always overrides inference.
 
@@ -257,7 +272,7 @@ API key and no network access.
 | `praxis/news/` | `NewsProvider`, `RSSNewsAdapter`, `NewsService`, `EventClusterer`, `NewsSummaryService`, `Event` (F01) |
 | `praxis/llm/` | `LLMClient` interface and the OpenAI adapter |
 | `praxis/persistence/` | SQLite database and repositories |
-| `praxis/research/` | Research session, commands, plan, planner, concrete situation, assessment method, stopping policy |
+| `praxis/research/` | Research session, commands, plan, planner, concrete situation, assessment method, stopping policy, historical context (F09) |
 | `praxis/reading/` | `AnnotationService` (F06), `RecommendationService` (F07), `PrerequisiteService` and `LearningPath` (F08) |
 | `praxis/reader_model/` | Reader profile, its service, event bus and updater |
 | `praxis/tools/` | Agent tools, tool manager and tool factory |
