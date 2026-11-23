@@ -197,9 +197,11 @@ class PrerequisiteService:
         warnings: list[str] = []
         if profile is not None and not profile.personalization_enabled:
             warnings.append(PERSONALIZATION_OFF_WARNING)
-        elif profile is None or profile.is_sparse:
+        # Interests and reading history say nothing about what the reader
+        # understands; only knowledge areas do.
+        assessed = uses_profile and bool(profile.knowledge.areas)
+        if profile is None or (uses_profile and not assessed):
             warnings.append(SPARSE_PROFILE_WARNING)
-        assessed = uses_profile and not profile.is_sparse
         known_topics = sorted(profile.knowledge.areas) if uses_profile else []
 
         prerequisites, tokens = self.identify_prerequisites(target, known_topics)

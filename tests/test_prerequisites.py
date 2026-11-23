@@ -1,5 +1,7 @@
 """PrerequisiteService and learning paths (F08, UC08, SD05)."""
 
+from datetime import datetime
+
 import pytest
 from conftest import ScriptedLLM
 
@@ -203,3 +205,17 @@ def test_model_failure_and_unreadable_replies_are_errors(library_database):
 def test_an_empty_target_is_refused(library_database):
     with pytest.raises(PrerequisiteError):
         service(library_database, ScriptedLLM(REPLY)).build_learning_path("  ")
+
+
+def test_interests_and_reading_alone_do_not_make_steps_required(library_database):
+    # A live run marked every step "needed" for a reader whose profile held
+    # only interests and reading progress, no knowledge at all.
+    profile = ReaderProfile()
+    profile.interests.add("1848")
+    manifesto = next(d for d in SQLDocumentRepository(library_database).list_all() if "Manifesto" in d.title)
+    profile.history.record(manifesto.id, manifesto.title, 1, 3, datetime(2026, 11, 1))
+
+    path = service(library_database, ScriptedLLM(REPLY)).build_learning_path("the Brumaire", profile)
+
+    assert not any(s.required for s in path.steps)
+    assert SPARSE_PROFILE_WARNING in path.warnings
