@@ -96,6 +96,18 @@ CREATE TABLE IF NOT EXISTS comparisons (
     data          TEXT NOT NULL
 );
 
+-- Learning paths (F08). The whole path, with each step's readings and
+-- status, is in data (JSON); the counts serve the path list.
+CREATE TABLE IF NOT EXISTS learning_paths (
+    id            TEXT PRIMARY KEY,
+    target        TEXT NOT NULL,
+    step_count    INTEGER NOT NULL,
+    settled_count INTEGER NOT NULL,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL,
+    data          TEXT NOT NULL
+);
+
 -- News events (F01, F02): a group of news reports and its card. data
 -- (JSON) holds the report ids, which are rows of documents.
 CREATE TABLE IF NOT EXISTS news_events (

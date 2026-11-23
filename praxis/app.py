@@ -31,6 +31,7 @@ from praxis.persistence import (
     SQLWorkspaceRepository,
 )
 from praxis.persistence.comparisons import SQLComparisonRepository
+from praxis.persistence.learning_paths import SQLLearningPathRepository
 from praxis.persistence.research import SQLResearchRepository
 from praxis.reader_model.events import LearningEventBus
 from praxis.reader_model.service import ReaderProfileService
@@ -102,7 +103,9 @@ def build_application(
             tools, llm, repository=SQLAnnotationRepository(database)
         ),
         recommendations=RecommendationService(tools, llm),
-        prerequisites=PrerequisiteService(tools, llm),
+        prerequisites=PrerequisiteService(
+            tools, llm, repository=SQLLearningPathRepository(database)
+        ),
         news=NewsService(
             news_providers if news_providers is not None
             else [RSSNewsAdapter(feed) for feed in read_feeds()],

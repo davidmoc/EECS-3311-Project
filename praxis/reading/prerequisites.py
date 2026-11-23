@@ -12,9 +12,11 @@ identify the gap").
 from __future__ import annotations
 
 import re
+import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from praxis.agent.prompts import MAX_PREREQUISITES, PREREQUISITE_KINDS, PromptBuilder
@@ -22,6 +24,9 @@ from praxis.documents import Citation, Document, NewsArticle
 from praxis.llm import LLMClient, LLMError
 from praxis.reader_model import KnowledgeLevel, ReaderProfile, normalize_topic
 from praxis.tools import ToolManager
+
+if TYPE_CHECKING:  # praxis.persistence.learning_paths imports this module
+    from praxis.persistence.learning_paths import LearningPathRepository, LearningPathSummary
 
 PASSAGE_SEARCH = "passage_search"
 READINGS_PER_STEP = 2
@@ -36,6 +41,7 @@ SPARSE_PROFILE_WARNING = (
     "Little is known about what you already understand, so every step is a "
     "suggestion. Skip what you know, or record it with praxis profile know."
 )
+NOT_STORED_WARNING = "The learning path could not be stored, so its progress cannot be kept: {}"
 PERSONALIZATION_OFF_WARNING = (
     "Personalization is off, so your knowledge was not consulted and every "
     "step is a suggestion."
@@ -120,6 +126,19 @@ class LearningPath:
     def gaps(self) -> list[LearningStep]:
         return [step for step in self.steps if step.is_gap]
 
+    @property
+    def settled_count(self) -> int:
+        """Steps the reader has dealt with: done, already known or skipped."""
+        return sum(step.status is not StepStatus.TODO for step in self.steps)
+
+    @property
+    def next_step(self) -> tuple[int, LearningStep] | None:
+        """The first step still to do, with its 1-based number."""
+        return next(
+            ((n, s) for n, s in enumerate(self.steps, start=1) if s.status is StepStatus.TODO),
+            None,
+        )
+
 
 def parse_prerequisites(text: str) -> list[Prerequisite]:
     """The model's prerequisites in order, each name once, at most
@@ -151,10 +170,55 @@ class PrerequisiteService:
         tools: ToolManager,
         llm: LLMClient | None = None,
         prompts: PromptBuilder | None = None,
+        repository: LearningPathRepository | None = None,
     ) -> None:
+        """Without ``repository``, paths are built but not stored."""
         self._tools = tools
         self._llm = llm
         self._prompts = prompts or PromptBuilder()
+        self._repository = repository
+
+    # --- stored paths and progress (UC08 steps 7-8) -----------------------
+
+    def get_path(self, path_id: UUID) -> LearningPath:
+        path = self._require_repository().get(path_id)
+        if path is None:
+            raise PrerequisiteError(f"There is no learning path {path_id}.")
+        return path
+
+    def list_paths(self, limit: int = 20) -> list[LearningPathSummary]:
+        return self._require_repository().list_recent(limit)
+
+    def find_path(self, id_prefix: str) -> UUID:
+        prefix = id_prefix.strip().lower()
+        if not prefix:
+            raise PrerequisiteError("A learning path id is required.")
+        matches = self._require_repository().find_ids(prefix)
+        if not matches:
+            raise PrerequisiteError(f"No learning path with id starting '{prefix}'.")
+        if len(matches) > 1:
+            raise PrerequisiteError(f"Id '{prefix}' matches {len(matches)} paths; use more characters.")
+        return matches[0]
+
+    def set_step_status(self, path_id: UUID, number: int, status: StepStatus) -> LearningPath:
+        """Record that step ``number`` (1-based) is done, already known,
+        skipped, or back to do. Updating the reader model is left to the
+        caller, which publishes the activity (Observer, as for reading)."""
+        path = self.get_path(path_id)
+        if not 1 <= number <= len(path.steps):
+            raise PrerequisiteError(
+                f"This path has {len(path.steps)} step{'s' if len(path.steps) != 1 else ''}; there is no step {number}."
+            )
+        path.steps[number - 1].status = status
+        self._require_repository().save(path)
+        return path
+
+    def _require_repository(self) -> LearningPathRepository:
+        if self._repository is None:
+            raise PrerequisiteError("Learning paths are not being stored.")
+        return self._repository
+
+    # --- building a path (SD05) -------------------------------------------
 
     def identify_prerequisites(
         self, target: str, known_topics: list[str] = ()
@@ -232,7 +296,7 @@ class PrerequisiteService:
                 + "; only a short AI orientation is given for "
                 + ("it." if len(gaps) == 1 else "them.")
             )
-        return LearningPath(
+        path = LearningPath(
             target,
             steps,
             tuple(already_known),
@@ -241,6 +305,12 @@ class PrerequisiteService:
             warnings=tuple(warnings),
             tokens_used=tokens,
         )
+        if self._repository is not None and path.steps:
+            try:
+                self._repository.save(path)
+            except sqlite3.Error as exc:
+                path.warnings = (*path.warnings, NOT_STORED_WARNING.format(exc))
+        return path
 
     def _find_readings(
         self,

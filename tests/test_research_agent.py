@@ -198,6 +198,8 @@ def test_an_empty_objective_is_rejected(library_database):
     "praxis.persistence.research", "praxis.tools", "praxis.reading",
     "praxis.comparison", "praxis.comparison.command", "praxis.persistence.comparisons",
     "praxis.news.exploration", "praxis.news.service", "praxis.persistence.events",
+    "praxis.reading.recommendations", "praxis.reading.prerequisites",
+    "praxis.persistence.learning_paths", "praxis.persistence.citations",
 ])
 def test_packages_import_in_any_order(module):
     """praxis.agent and praxis.research depend on each other's modules; a
