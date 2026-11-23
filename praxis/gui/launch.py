@@ -12,6 +12,7 @@ from praxis.gui.home import HomeController, HomeView
 from praxis.gui.library import LibraryController, LibraryView, ReadingController
 from praxis.gui.main_window import MainWindow
 from praxis.gui.profile import ProfileController, ProfileView
+from praxis.gui.research import ResearchController, ResearchView
 from praxis.gui.tasks import TaskRunner, ThreadTaskRunner
 from praxis.persistence import Database
 
@@ -22,6 +23,10 @@ def build_window(application: Application, runner: TaskRunner) -> MainWindow:
     window.add_page("Home", HomeView(HomeController(application), runner))
     window.add_page("Library", LibraryView(
         LibraryController(application), ReadingController(application), runner
+    ))
+    window.add_page("Research", ResearchView(
+        ResearchController(application), runner,
+        open_reading=lambda document_id, paragraph: window.show_page("Library").open_text(document_id, paragraph),
     ))
     window.add_page("Profile", ProfileView(ProfileController(application), runner))
     return window

@@ -21,6 +21,24 @@ def escape(text: str) -> str:
     return _SPECIAL.sub(r"\\\1", text)
 
 
+# Links of this form open a text at a paragraph on the library page.
+READ_SCHEME = "praxis"
+
+
+def read_link(document_id, locator: str = "", label: str = "open in the library") -> str:
+    paragraph = locator.lstrip("¶") or "1"
+    return f"[{escape(label)}]({READ_SCHEME}:read/{document_id}/{paragraph})"
+
+
+def parse_read_link(url: str) -> tuple[str, int] | None:
+    """(document id, paragraph) from a ``read_link`` target, else None."""
+    prefix = f"{READ_SCHEME}:read/"
+    if not url.startswith(prefix):
+        return None
+    document_id, _, paragraph = url[len(prefix):].partition("/")
+    return document_id, int(paragraph) if paragraph.isdigit() else 1
+
+
 def labels(evidence: tuple[int, ...]) -> str:
     return escape(f"[{', '.join(str(n) for n in evidence)}]") if evidence else ""
 
@@ -70,7 +88,11 @@ def sources(
         text = source.citation.quoted_text
         if len(text) > SHOWN_PASSAGE_CHARS:
             text = text[:SHOWN_PASSAGE_CHARS].rstrip() + " […]"
-        parts.append(f"**{escape(source.label)}** {escape(source.citation.format())}{suffix}\n\n> {escape(text)}")
+        link = read_link(source.citation.document_id, source.citation.locator)
+        parts.append(
+            f"**{escape(source.label)}** {escape(source.citation.format())}{suffix} — {link}"
+            f"\n\n> {escape(text)}"
+        )
     return "\n\n".join(parts)
 
 
