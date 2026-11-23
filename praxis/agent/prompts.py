@@ -279,7 +279,8 @@ topic, judged from its passages and kind.
 describe a text's contents beyond what they show, except for widely known \
 facts about the work, which you present as general background.
 - Prefer texts the reader has not finished; recommend a finished text \
-only if it is clearly the best on the topic, and say they have read it.
+only if it is clearly the best on the topic. The reader's progress is \
+shown beside each recommendation, so do not restate it in the reason.
 - If what is known about the reader is given, say in the reason how the \
 text fits them (for example, that it builds on what they know). If \
 nothing about the reader is given, do not claim it suits them personally.

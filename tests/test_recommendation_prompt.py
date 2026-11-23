@@ -17,6 +17,8 @@ def test_prompt_lists_the_topic_and_numbered_candidates():
     assert "[1] Lenin" in prompt.user and "Matching passages: 1" in prompt.user
     assert "recommend: [n]" in prompt.system
     assert "About the reader" not in prompt.system
+    # The CLI prints progress itself; a live run repeated it in every reason.
+    assert "do not restate it in the reason" in prompt.system
 
 
 def test_prompt_describes_the_reader_only_when_something_is_known():
