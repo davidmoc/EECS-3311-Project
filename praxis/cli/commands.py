@@ -30,6 +30,7 @@ from praxis.news.exploration import ExpandedEvent
 from praxis.news.service import Dashboard, NewsError, NewsRefresh
 from praxis.reader_model import ExplanationDepth, KnowledgeLevel, ReaderProfile
 from praxis.reader_model.events import DocumentRead, PrerequisiteMarkedKnown
+from praxis.reader_model.personalization import RequestPreferences
 from praxis.reading import (
     AnnotationError,
     AnnotationResult,
@@ -78,6 +79,27 @@ USER_ERRORS = (
     PrerequisiteError, RecommendationError, ResearchError, TraditionsError, ValueError,
 )
 
+# F14: the reader's overrides for one request; the profile is not changed.
+Detail = Annotated[Optional[ExplanationDepth], typer.Option(
+    "--detail", case_sensitive=False,
+    help="More or less detail for this request only, whatever your profile says.",
+)]
+General = Annotated[bool, typer.Option(
+    "--general", help="Do not adapt this request to your reader profile.",
+)]
+
+
+def _preferences(detail: ExplanationDepth | None, general: bool) -> RequestPreferences | None:
+    if detail is None and not general:
+        return None
+    return RequestPreferences(depth=detail, personalized=not general)
+
+
+def _profile_for(application: Application, preferences: RequestPreferences | None) -> ReaderProfile:
+    profile = application.profiles.get_profile()
+    return preferences.apply(profile) if preferences else profile
+
+
 # Longest stretch of a passage printed by `ask`; the rest is one command away.
 SHOWN_PASSAGE_CHARS = 600
 
@@ -121,10 +143,12 @@ def ask(
     question: Annotated[str, typer.Argument(help="Your question, in quotes.")],
     save: Annotated[bool, typer.Option("--save", help="Save the answer to your workspace.")] = False,
     tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t", help="Tag for the saved answer; repeatable.")] = None,
+    detail: Detail = None,
+    general: General = False,
 ) -> None:
     """Ask a question; get the library passages that address it, then an explanation."""
     with session() as application:
-        response = application.agent.answer_question(question)
+        response = application.agent.answer_question(question, _preferences(detail, general))
         saved = None
         if save and response.sources:
             saved = application.workspace.save_answer(response, tags=tuple(tag or ()))
@@ -207,10 +231,13 @@ def _print_warnings(warnings: tuple[str, ...], tokens_used: int) -> None:
 def history(
     topic: Annotated[str, typer.Argument(help="Topic, event or period, in quotes.")],
     broad: Annotated[bool, typer.Option("--broad", help="Trace it even if the AI judges it too broad.")] = False,
+    general: General = False,
 ) -> None:
     """Trace how a situation developed: origins, stages, turning points, disputed views."""
     with session() as application:
-        context = application.agent.explore_history(topic, allow_broad=broad)
+        context = application.agent.explore_history(
+            topic, allow_broad=broad, preferences=_preferences(None, general)
+        )
     _print_history(context)
 
 
@@ -291,10 +318,11 @@ def _print_history_line(text: str, evidence: tuple[int, ...]) -> None:
 def analyze(
     issue: Annotated[str, typer.Argument(help="Issue, event or question, in quotes.")],
     framework: Annotated[Optional[str], typer.Option("--framework", "-f", help="A theoretical framework to apply, in quotes.")] = None,
+    general: General = False,
 ) -> None:
     """Analyse an issue with Marxist theory: evidence, theory, and how they connect."""
     with session() as application:
-        analysis = application.agent.analyze(issue, framework)
+        analysis = application.agent.analyze(issue, framework, _preferences(None, general))
     _print_analysis(analysis)
 
 
@@ -356,10 +384,13 @@ def _print_analysis(analysis: MaterialistAnalysis) -> None:
 @app.command("traditions")
 def traditions(
     topic: Annotated[str, typer.Argument(help="Topic or theoretical question, in quotes.")],
+    general: General = False,
 ) -> None:
     """Compare Marxism with other leftist traditions that differ on a topic, from their texts."""
     with session() as application:
-        result = application.traditions.compare_traditions(topic, application.profiles.get_profile())
+        result = application.traditions.compare_traditions(
+            topic, _profile_for(application, _preferences(None, general))
+        )
     _print_traditions(result)
 
 
@@ -451,11 +482,15 @@ def research(
     max_tool_calls: MaxToolCalls = ResearchBudget().max_tool_calls,
     save: Annotated[bool, typer.Option("--save", help="Save the result to your workspace.")] = False,
     tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t", help="Tag for the saved result; repeatable.")] = None,
+    detail: Detail = None,
+    general: General = False,
 ) -> None:
     """Research a question in several steps: plan, gather sources, then analyse them."""
     budget = ResearchBudget(max_iterations=max_steps, max_tool_calls=max_tool_calls)
     with session() as application:
-        result = application.agent.research(objective, budget)
+        result = application.agent.research(
+            objective, budget, preferences=_preferences(detail, general)
+        )
         saved = _save_research(application, result, save, tag)
     _print_research(result)
     _print_continue_hint(result)
@@ -605,24 +640,28 @@ def sessions_compare(
 def sessions_analyze(
     session_id: Annotated[str, typer.Argument(help="Session id or prefix.")],
     framework: Annotated[Optional[str], typer.Option("--framework", "-f", help="A theoretical framework to apply, in quotes.")] = None,
+    general: General = False,
 ) -> None:
     """Analyse a research session's evidence with Marxist theory (F11)."""
     with session() as application:
         agent = application.agent
-        analysis = agent.analyze_research(agent.find_research(session_id), framework)
+        analysis = agent.analyze_research(
+            agent.find_research(session_id), framework, _preferences(None, general)
+        )
     _print_analysis(analysis)
 
 
 @sessions_app.command("traditions")
 def sessions_traditions(
     session_id: Annotated[str, typer.Argument(help="Session id or prefix.")],
+    general: General = False,
 ) -> None:
     """Compare leftist traditions on a research session's question (F12)."""
     with session() as application:
         agent = application.agent
         research = agent.get_research(agent.find_research(session_id))
         result = application.traditions.compare_traditions(
-            research.objective, application.profiles.get_profile(),
+            research.objective, _profile_for(application, _preferences(None, general)),
             research_session=str(research.session.id)[:8],
         )
     _print_traditions(result)
@@ -636,12 +675,16 @@ def sessions_continue(
     max_tool_calls: MaxToolCalls = ResearchBudget().max_tool_calls,
     save: Annotated[bool, typer.Option("--save", help="Save the result to your workspace.")] = False,
     tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t", help="Tag for the saved result; repeatable.")] = None,
+    detail: Detail = None,
+    general: General = False,
 ) -> None:
     """Run another round of earlier research: a new direction, or the steps left unrun."""
     budget = ResearchBudget(max_iterations=max_steps, max_tool_calls=max_tool_calls)
     with session() as application:
         agent = application.agent
-        result = agent.continue_research(agent.find_research(session_id), focus, budget)
+        result = agent.continue_research(
+            agent.find_research(session_id), focus, budget, _preferences(detail, general)
+        )
         saved = _save_research(application, result, save, tag)
     _print_research(result)
     _print_continue_hint(result)
@@ -1109,10 +1152,11 @@ def library_read(
 @app.command("recommend")
 def recommend(
     topic: Annotated[Optional[str], typer.Argument(help="Topic or question, in quotes. Leave out to use your interests.")] = None,
+    general: General = False,
 ) -> None:
     """Recommend texts from the library to read on a topic, each with why."""
     with session() as application:
-        profile = application.profiles.get_profile()
+        profile = _profile_for(application, _preferences(None, general))
         if topic is None:
             result = application.recommendations.recommend_next(profile)
         else:
@@ -1324,6 +1368,8 @@ def annotate(
     document_id: Annotated[str, typer.Argument(help="Id or id prefix of the text.")],
     paragraph: Annotated[int, typer.Argument(help="Paragraph number, as in [¶12] from `library read`.", min=1)],
     kind: Annotated[str, typer.Option("--type", "-t", help=f"Kind of annotation: {ANNOTATION_TYPES}.")] = "argument",
+    detail: Detail = None,
+    general: General = False,
 ) -> None:
     """Ask for an AI annotation of one paragraph; it is kept with the text."""
     with session() as application:  # inside, so a bad --type is reported, not raised
@@ -1331,7 +1377,8 @@ def annotate(
         document = application.library.get_document(document_id)
         passage = document.paragraph(paragraph)
         result = application.annotations.generate_annotation(
-            document, passage, annotation_type, application.profiles.get_profile()
+            document, passage, annotation_type,
+            _profile_for(application, _preferences(detail, general)),
         )
 
     typer.secho(f"{document.title} — {document.author}, {passage.locator}", bold=True)
