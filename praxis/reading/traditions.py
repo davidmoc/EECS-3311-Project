@@ -23,11 +23,19 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
+from typing import TYPE_CHECKING
+from uuid import UUID
 
-from praxis.agent.corpus import Source, cited_numbers
-from praxis.agent.prompts import MAX_TRADITIONS
-from praxis.documents import Document
-from praxis.research.history import SuggestedReading, strip_citations
+from praxis.agent.corpus import ResearchCorpus, Source, cited_numbers
+from praxis.agent.prompts import MAX_TRADITIONS, PromptBuilder, reader_context
+from praxis.documents import Document, NewsArticle
+from praxis.llm import LLMClient, LLMError
+from praxis.reader_model import ReaderProfile
+from praxis.research.history import SuggestedReading, strip_citations, suggested_readings
+from praxis.tools import ToolManager
+
+if TYPE_CHECKING:
+    from praxis.library import LibraryService
 
 PASSAGE_SEARCH = "passage_search"
 SOURCE_RETRIEVAL = "source_retrieval"
@@ -320,3 +328,223 @@ def authored_by(document: Document, representative: str) -> bool:
     if len(surname) < 3:
         return False
     return re.search(rf"\b{re.escape(surname)}\b", document.author.casefold()) is not None
+
+
+class IdeologicalContextService:
+    """F12. Needs the ``passage_search`` and ``source_retrieval`` tools."""
+
+    def __init__(
+        self,
+        tools: ToolManager,
+        library: LibraryService,
+        llm: LLMClient | None = None,
+        prompts: PromptBuilder | None = None,
+    ) -> None:
+        self._tools = tools
+        self._library = library
+        self._llm = llm
+        self._prompts = prompts or PromptBuilder()
+
+    def compare_traditions(
+        self,
+        topic: str,
+        profile: ReaderProfile | None = None,
+        research_session: str | None = None,
+    ) -> TraditionsComparison:
+        """How Marxism and the traditions that differ from it treat
+        ``topic``, from library passages."""
+        topic = " ".join(topic.split())
+        if not topic:
+            raise TraditionsError("Name a topic or question to compare traditions on.")
+        if self._llm is None:
+            raise TraditionsError(NO_LLM_ERROR)
+        tokens = 0
+        warnings: list[str] = []
+
+        def result(status: TraditionsStatus, **fields) -> TraditionsComparison:
+            return TraditionsComparison(
+                topic, status, research_session=research_session,
+                warnings=tuple(warnings), tokens_used=tokens, **fields,
+            )
+
+        documents = [d for d in self._library.browse() if d.kind != NewsArticle.kind]
+        parsed, tokens = self.find_relevant_traditions(topic, documents)
+        traditions = list(parsed.traditions)
+        if not any(t.is_marxism for t in traditions):
+            traditions.insert(0, Tradition(MARXISM, keywords=topic))
+
+        corpus = ResearchCorpus()
+        perspectives, left_out = self._retrieve(topic, traditions, documents, corpus, warnings)
+        others = [p for p in perspectives if not p.tradition.is_marxism]
+        sources = tuple(corpus.sources)
+        if len(traditions) == 1:
+            warnings.insert(0, NO_OTHER_TRADITION)
+            return result(
+                TraditionsStatus.NO_OTHER_TRADITION, perspectives=tuple(perspectives),
+                sources=sources, none_reason=parsed.none_reason,
+            )
+        if len(perspectives) < 2 or not others:
+            warnings.append(ONLY_ONE_PERSPECTIVE)
+            return result(
+                TraditionsStatus.ONE_PERSPECTIVE, perspectives=tuple(perspectives),
+                sources=sources, left_out=tuple(left_out),
+            )
+        for perspective in perspectives:
+            if not perspective.in_own_words:
+                warnings.append(DESCRIBED_BY_OTHERS.format(name=perspective.name))
+
+        groups = [
+            (p.name, [corpus.source(n) for n in p.own], [corpus.source(n) for n in p.reported])
+            for p in perspectives
+        ]
+        prompt = self._prompts.build_tradition_comparison_prompt(topic, groups, profile)
+        try:
+            response = self._llm.generate(prompt)
+        except LLMError as exc:
+            warnings.append(f"The comparison could not be generated: {exc}")
+            return result(
+                TraditionsStatus.NOT_COMPARED,
+                perspectives=self.recommend_representative_texts(perspectives, corpus, set()),
+                sources=sources, left_out=tuple(left_out),
+            )
+        tokens += response.total_tokens
+        comparison = parse_tradition_comparison(response.text)
+        if comparison is None:
+            warnings.append(COMPARISON_UNREADABLE)
+            return result(
+                TraditionsStatus.NOT_COMPARED,
+                perspectives=self.recommend_representative_texts(perspectives, corpus, set()),
+                sources=sources, left_out=tuple(left_out),
+            )
+        statements, disagreements, dropped = check_comparison(comparison, tuple(perspectives))
+        if dropped:
+            warnings.append(UNCITED_LINES.format(
+                count=dropped, s="s" if dropped != 1 else "",
+                they="they" if dropped != 1 else "it", were="were" if dropped != 1 else "was",
+            ))
+        if not disagreements:
+            warnings.append(NO_DISAGREEMENT)
+        cited = {n for s in statements for n in s.evidence} | {n for d in disagreements for n in d.evidence}
+        return result(
+            TraditionsStatus.COMPARED if statements else TraditionsStatus.NOT_COMPARED,
+            perspectives=self.recommend_representative_texts(perspectives, corpus, cited),
+            sources=sources,
+            statements=tuple(statements),
+            disagreements=tuple(disagreements),
+            gaps=comparison.gaps,
+            left_out=tuple(left_out),
+            personalized=reader_context(profile) is not None,
+        )
+
+    def find_relevant_traditions(
+        self, topic: str, documents: list[Document]
+    ) -> tuple[ParsedTraditions, int]:
+        """The traditions the model judges to differ on ``topic``, with
+        their representatives among the library's authors, and the tokens
+        spent asking."""
+        try:
+            response = self._llm.generate(
+                self._prompts.build_tradition_prompt(topic, _authors(documents))
+            )
+        except LLMError as exc:
+            raise TraditionsError(f"The model could not be asked which traditions differ: {exc}") from exc
+        parsed = parse_traditions(response.text)
+        if parsed is None:
+            raise TraditionsError(UNREADABLE_TRADITIONS)
+        return parsed, response.total_tokens
+
+    def recommend_representative_texts(
+        self, perspectives: list[Perspective], corpus: ResearchCorpus, cited: set[int]
+    ) -> tuple[Perspective, ...]:
+        """Each perspective with the texts to read for it: its own
+        representatives' texts, the cited ones first. A tradition known
+        only from others' descriptions gets no reading."""
+        with_readings = []
+        for perspective in perspectives:
+            own = [corpus.source(n) for n in perspective.own]
+            ranked = [s for s in own if s.number in cited] + [s for s in own if s.number not in cited]
+            with_readings.append(Perspective(
+                perspective.tradition, perspective.own, perspective.reported,
+                suggested_readings(tuple(ranked)),
+            ))
+        return tuple(with_readings)
+
+    def _retrieve(
+        self,
+        topic: str,
+        traditions: list[Tradition],
+        documents: list[Document],
+        corpus: ResearchCorpus,
+        warnings: list[str],
+    ) -> tuple[list[Perspective], list[str]]:
+        """Each tradition's passages: its representatives' own first; if
+        none, others' passages about it. Traditions with neither are left
+        out. Each document belongs to the first tradition claiming it."""
+        owner: dict[UUID, str] = {}
+        for tradition in traditions:
+            for document in documents:
+                if document.id not in owner and any(
+                    authored_by(document, r) for r in tradition.representatives
+                ):
+                    owner[document.id] = tradition.name
+        perspectives: list[Perspective] = []
+        left_out: list[str] = []
+        for tradition in traditions:
+            query = " ".join(f"{topic} {tradition.keywords}".split())
+            matches = self._search(query, warnings)
+            own_matches = [m for m in matches if owner.get(m.document.id) == tradition.name]
+            if not own_matches:
+                for document in [d for d in documents if owner.get(d.id) == tradition.name][:REPRESENTATIVE_DOCUMENTS]:
+                    own_matches.extend(self._search_in(document, query, warnings))
+            own = self._add(own_matches, corpus, OWN_PASSAGES)
+            reported: list[int] = []
+            if not own:
+                about = self._search(f"{tradition.name} {tradition.keywords}", warnings)
+                reported = self._add(
+                    [m for m in about if owner.get(m.document.id) != tradition.name],
+                    corpus, REPORTED_PASSAGES,
+                )
+            if not own and not reported:
+                warnings.append(NO_MATERIAL.format(name=tradition.name))
+                left_out.append(tradition.name)
+                continue
+            perspectives.append(Perspective(tradition, tuple(own), tuple(reported)))
+        return perspectives, left_out
+
+    def _search(self, query: str, warnings: list[str]) -> list:
+        result = self._tools.execute_tool(PASSAGE_SEARCH, {"query": query, "limit": SEARCH_LIMIT})
+        if not result.success:
+            warnings.append(f"Library search failed: {result.error}")
+            return []
+        return [m for m in result.items if m.document.kind != NewsArticle.kind]
+
+    def _search_in(self, document: Document, query: str, warnings: list[str]) -> list:
+        result = self._tools.execute_tool(
+            SOURCE_RETRIEVAL, {"document_id": str(document.id), "query": query, "limit": OWN_PASSAGES}
+        )
+        if not result.success:
+            warnings.append(f"Searching “{document.title}” failed: {result.error}")
+            return []
+        return list(result.items)
+
+    @staticmethod
+    def _add(matches: list, corpus: ResearchCorpus, limit: int) -> list[int]:
+        """Add up to ``limit`` passages not already in the corpus: a
+        passage belongs to one tradition only."""
+        numbers: list[int] = []
+        for match in matches:
+            if len(numbers) >= limit:
+                break
+            before = len(corpus)
+            source = corpus.add_passage(match.document, match.passage)
+            if len(corpus) > before:
+                numbers.append(source.number)
+        return numbers
+
+
+def _authors(documents: list[Document]) -> list[tuple[str, list[str]]]:
+    """Each author with their titles, in library order."""
+    by_author: dict[str, list[str]] = {}
+    for document in documents:
+        by_author.setdefault(document.author, []).append(document.title)
+    return list(by_author.items())
