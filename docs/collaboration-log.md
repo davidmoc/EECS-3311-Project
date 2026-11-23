@@ -391,4 +391,4 @@ platform.openai.com.
   - With no evidence, nothing is analysed. With evidence but no theoretical passage for the chosen concepts, no analysis is written and the evidence is shown. Without a model, the evidence is returned. If the model names no usable concept, theory is searched for the framework, or the issue, as typed.
   - Analyses are not stored and cannot yet be saved to the workspace. Theoretical connections suggested within reading views (F06) are not built.
 - **Human contribution:** None on this slice yet; the code has not been reviewed.
-- **Outcome:** Seven code commits and this documentation commit.
+- **Outcome:** Six code commits and this documentation commit.
