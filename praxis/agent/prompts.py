@@ -428,6 +428,66 @@ than forcing it.
 - Write at most 5 lines of each kind.
 - No other text."""
 
+MAX_TRADITIONS = 4  # Marxism and up to three others
+
+TRADITION_RULES = f"""\
+You find leftist traditions for Praxis, a platform for studying politics, \
+history and Marxist theory from primary sources. Its own standpoint is \
+Marxism-Leninism, but readers should see the real disagreements between \
+Marxism and other communist, socialist or anarchist traditions, and judge \
+them from the sources.
+
+Given a topic and the authors in the library, reply only with lines in \
+these forms:
+perspective: <tradition> | <authors in the library who represent it, comma-separated, or none> | <keywords for finding its position in the library> | <why its position on this topic matters>
+none: <why no other tradition holds a materially different position>
+
+Rules:
+- The first line is the Marxist perspective, named "Marxism".
+- Then add up to {MAX_TRADITIONS - 1} other traditions only if they hold a \
+materially different position on this topic. Do not invent a disagreement \
+to produce balance. If no other tradition differs materially, write the \
+Marxist line and one none: line.
+- Name as representatives only authors from the library list, spelled as \
+listed, and each author for one tradition only. If the library has no \
+author of a tradition, write none; its position may still be described by \
+others.
+- Keywords use the vocabulary of 19th and early 20th century texts in \
+translation, at most six. Leave out author names.
+- No other text."""
+
+TRADITION_COMPARISON_RULES = f"""\
+You compare leftist traditions for readers of Praxis, a platform for \
+studying politics, history and Marxist theory from primary sources. Its \
+standpoint is Marxism-Leninism, but you present each tradition's position \
+fairly, so the reader can examine the arguments and sources for themselves.
+
+The passages are grouped by tradition. "In its own words" passages are by \
+the tradition's representatives; "described by others" passages are other \
+authors writing about it.
+
+Reply only with lines in these forms, one item per line:
+position: <tradition> | <its position on the topic> [n]
+conditions: <tradition> | <the material and historical conditions it developed in> [n]
+disagreement: <what the traditions disagree about, and how> [n, m]
+assessment: <tradition> | <how Marxist analysis judges this tradition's position> [n]
+gap: <what the passages cannot show>
+
+Rules:
+- Name each tradition exactly as its passage heading does.
+- State a position from the tradition's own passages where there are \
+any. If only others describe it, say that it is their description.
+- A disagreement cites passages from at least two traditions. Do not \
+invent one the passages do not show; if the traditions agree on \
+something, say so in a position line.
+- An assessment is the Marxist view of another tradition, kept apart from \
+that tradition's own position. Write none for Marxism itself.
+{CITATION_NUMBER_RULE}
+- Every line except gap cites the passages it rests on as [n]. Leave out \
+anything they do not support.
+- Write at most 4 lines of each kind.
+- No other text."""
+
 _ANNOTATION_TASKS = {
     "terminology": (
         "Explain the terms, names and concepts in the passage that a reader "
@@ -868,6 +928,43 @@ class PromptBuilder:
             )
         user += f"\n\nPassages:\n\n{_grouped_passages(corpus, purposes)}"
         return Prompt(system=system, user=user)
+
+    def build_tradition_prompt(self, topic: str, authors: list[tuple[str, list[str]]]) -> Prompt:
+        """A prompt asking which traditions differ on ``topic``.
+        ``authors`` pairs each library author with their titles."""
+        listing = "\n".join(
+            f"- {author}: {'; '.join(titles)}" for author, titles in authors
+        ) or "- (the library is empty)"
+        return Prompt(
+            system=TRADITION_RULES,
+            user=f"Topic: {topic}\n\nAuthors in the library:\n{listing}",
+        )
+
+    def build_tradition_comparison_prompt(
+        self,
+        topic: str,
+        groups: list[tuple[str, list[Source], list[Source]]],
+        profile: ReaderProfile | None = None,
+    ) -> Prompt:
+        """A prompt asking how the traditions' positions compare.
+        ``groups`` gives each tradition with its own passages and the
+        passages others wrote about it."""
+        if not any(own or others for _, own, others in groups):
+            raise ValueError("A tradition comparison prompt needs at least one passage.")
+        system = TRADITION_COMPARISON_RULES
+        context = reader_context(profile)
+        if context:
+            system += f"\n\nAbout the reader:\n{context}"
+        sections = []
+        for name, own, others in groups:
+            parts = [f"## {name}"]
+            for heading, sources in (("In its own words", own), ("Described by others", others)):
+                if sources:
+                    parts.append(f"### {heading}\n\n" + "\n\n".join(
+                        f"{s.label} {s.citation.format()}\n{s.citation.quoted_text}" for s in sources
+                    ))
+            sections.append("\n\n".join(parts))
+        return Prompt(system=system, user=f"Topic: {topic}\n\nPassages:\n\n" + "\n\n".join(sections))
 
     @staticmethod
     def parse_annotation(text: str) -> tuple[str, list[str]]:
