@@ -339,8 +339,9 @@ Rules:
 whole century, or "the history of capitalism") that a short account from \
 a few passages would mislead. Then write no search lines.
 - Otherwise write 2 to {MAX_HISTORY_SEARCHES} search lines, from the \
-origins to the latest developments, in the vocabulary those texts would \
-use. Leave out author names.
+origins to the latest developments. Keep each period label short, and \
+give at most six keywords, in the vocabulary those texts would use. \
+Leave out author names.
 - No other text."""
 
 HISTORY_RULES = f"""\

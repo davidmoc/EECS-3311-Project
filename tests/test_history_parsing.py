@@ -100,6 +100,12 @@ def test_suggested_readings_are_the_cited_texts_most_cited_first():
     assert [(r.title, r.cited, r.start) for r in readings] == [("B", 2, "¶7"), ("A", 1, "¶3")]
 
 
+def test_plan_rules_limit_keywords():
+    # A live plan's searches were long lists of phrases, and the first two
+    # matched texts on France and England rather than Vienna.
+    assert "at most six keywords" in PromptBuilder().build_history_plan_prompt("x").system
+
+
 def test_prompts_carry_the_topic_and_grouped_passages():
     builder = PromptBuilder()
     assert builder.build_history_plan_prompt("1848 in Germany").user == "Topic: 1848 in Germany"
