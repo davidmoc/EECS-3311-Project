@@ -122,7 +122,8 @@ Choose a page on the left:
   menu saves the paragraph to your workspace; **◀ Library** goes back to the
   list.
 - **News**: fetch the latest news, or show what is already stored. Each
-  event groups reports from several outlets and has an AI summary. Open an
+  event is a card grouping reports from several outlets, with a shortened
+  AI summary and a warning if the grouping is uncertain. Open an
   event for its reports, background from the library and an AI account.
   From there you can research it, compare its outlets, trace its history
   or save it.
@@ -130,16 +131,22 @@ Choose a page on the left:
   trace the history, Marxist analysis, compare leftist traditions,
   recommend readings, build a learning path), type the topic, and
   optionally ask for more or less detail, or a general answer, for this
-  request only. Results show their passages first; each passage has a link
-  that opens the text at that paragraph.
+  request only. Long results open with a "Jump to" bar. What the model
+  wrote sits in tinted boxes labelled AI-generated; the authors' own words
+  sit in white cards, each with a link that opens the text at that
+  paragraph. A citation such as [3] in AI text scrolls to passage 3. A
+  plain question shows its passages before the explanation; research,
+  history, analysis and comparisons show their findings first.
 - **Past research**: every research run. Reopen one as it was left,
   continue it with a new focus, or follow up with an analysis, a
   comparison of the texts behind it, or a comparison of traditions.
 - **Compare**: tick two to four texts and name a subject. Earlier
   comparisons are listed to reopen.
-- **Learning paths**: your stored paths. Mark a step done, already known
-  or skipped; done and known steps are added to what the system knows
-  about you.
+- **Learning paths**: your stored paths, with a progress bar and the next
+  step. Each step has **Mark done**, **I already know this** and **Skip**
+  links (and **Undo**); done and known steps fold to one line and are
+  added to what the system knows about you. A path built on the Research
+  page links here.
 - **Workspace**: everything you saved, to search, add notes to, or
   remove. "Continue" goes back to where the item came from; a text opens
   where you stopped reading. The Save buttons are on the Library,

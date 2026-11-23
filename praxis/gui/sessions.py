@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from praxis.app import Application
 from praxis.gui import results
+from praxis.gui.render import notice
 from praxis.gui.tasks import TaskRunner, describe_error
 from praxis.gui.widgets import OpenReading, item_list, lock_while_busy, result_browser
 from praxis.persistence.research import ResearchSessionSummary
@@ -133,7 +134,7 @@ class SessionsView(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, str(summary.id))
             self.session_list.addItem(item)
         if not sessions:
-            self.output.setMarkdown("No research yet. Run some from the Research page; every run is kept here.")
+            self.output.setHtml(notice("No research yet. Run some from the Research page; every run is kept here."))
         self._enable_actions()
 
     def _enable_actions(self) -> None:
@@ -152,7 +153,7 @@ class SessionsView(QWidget):
             self.message.setText(f"Error: {describe_error(exc)}")
             return
         self.selected = session_id
-        self.output.setMarkdown(results.research(result))
+        self.output.setHtml(results.research(result))
         self.message.clear()
         self._enable_actions()
 
@@ -162,7 +163,7 @@ class SessionsView(QWidget):
             return
 
         def done(result: Any) -> None:
-            self.output.setMarkdown(results.research(result))
+            self.output.setHtml(results.research(result))
             self.message.clear()
             self.focus.clear()
             self.refresh()
@@ -175,7 +176,7 @@ class SessionsView(QWidget):
             return
 
         def done(result: Any) -> None:
-            self.output.setMarkdown(renderer(result))
+            self.output.setHtml(renderer(result))
             self.message.setText("Select the session again to see the research itself.")
 
         self._run(description, lambda: getattr(self._controller, method)(session_id), done)

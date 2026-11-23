@@ -38,7 +38,7 @@ def test_a_question_without_a_model_still_shows_its_passages(gui):
     shown = run(page, "ask", "Why are wages so low?")
 
     assert "Why are wages so low?" in shown
-    assert "Sources" in shown and "open in the library" in shown
+    assert "PASSAGES" in shown and "Open in the library ›" in shown
     assert "No language model is configured" in shown
 
 
@@ -51,7 +51,7 @@ def test_a_question_with_less_detail_is_explained_for_this_request(gui):
 
     shown = run(page, "ask", "Why are wages so low?")
 
-    assert "Explanation (AI-generated)" in shown
+    assert "AI-GENERATED  Explanation" in shown
     assert "Wages are the cost of keeping the worker alive" in shown
     assert "two or three sentences" in llm.prompts[1].system
     assert application.profiles.get_profile().explanation_depth is ExplanationDepth.STANDARD
@@ -66,11 +66,13 @@ def test_research_shows_its_steps_sources_and_analysis(gui):
 
     shown = run(research_page(window), "research", "Why did the Vienna insurrection fail?")
 
-    assert "Research steps" in shown and "✓" in shown
-    assert "Analysis (AI-generated)" in shown
+    assert "HOW IT WAS RESEARCHED" in shown and "✓" in shown
+    assert "AI-GENERATED  Analysis" in shown
     assert "The workers fought alone" in shown
-    assert "Open questions (AI-generated)" in shown
-    assert "Further reading" in shown
+    assert "AI-GENERATED  Open questions" in shown
+    assert "FURTHER READING" in shown
+    # The analysis comes before the passages it cites.
+    assert shown.index("The workers fought alone") < shown.index("SOURCES")
 
 
 @pytest.mark.parametrize("mode, text, error", [
@@ -101,8 +103,8 @@ def test_recommendations_without_a_model_are_ranked_by_matches(gui):
     shown = run(research_page(window), "recommend", "imperialism")
 
     assert "Readings on imperialism" in shown
-    assert "ranked by matching passages" in shown
-    assert "start reading" in shown
+    assert "Ranked by matching passages" in shown
+    assert "Start reading ›" in shown
 
 
 def test_history_and_analysis_label_their_ai_output(gui):
@@ -114,8 +116,9 @@ def test_history_and_analysis_label_their_ai_output(gui):
     shown = run(research_page(window), "history", "the Vienna insurrection of 1848")
 
     assert "Historical context: the Vienna insurrection of 1848" in shown
-    assert "How it developed, organised from the passages (AI-generated)" in shown
-    assert "March 1848: The workers took the barricades" in shown
+    assert "AI-GENERATED  How it developed, organised from the passages" in shown
+    # The chronology is a table: the date in one cell, what happened in the next.
+    assert "Chronology" in shown and "March 1848" in shown and "The workers took the barricades" in shown
 
 
 def test_a_passage_link_opens_the_text_at_its_paragraph(gui):
@@ -133,3 +136,23 @@ def test_a_passage_link_opens_the_text_at_its_paragraph(gui):
     assert window.current_title == "Library"
     assert library.text.document.id == source.citation.document_id
     assert library.opened_at == int(source.citation.locator.lstrip("¶"))
+
+
+def test_a_citation_in_ai_text_scrolls_to_its_passage(gui):
+    from PySide6.QtCore import QUrl
+    from PySide6.QtWidgets import QApplication
+
+    llm = ScriptedLLM("minimum wage", "Wages are the cost of keeping the worker alive [6].")
+    window, _ = gui(llm, seed=True)
+    page = research_page(window)
+    window.resize(900, 400)
+    window.show()  # laid out, so the pane can scroll
+    run(page, "ask", "Why are wages so low?")
+    QApplication.processEvents()
+    assert 'href="#src-6"' in page.output.toHtml()  # the [6] is a link
+    scroll = page.output.verticalScrollBar()
+    scroll.setValue(0)
+
+    page.output.anchorClicked.emit(QUrl("#src-6"))
+
+    assert scroll.value() > 0

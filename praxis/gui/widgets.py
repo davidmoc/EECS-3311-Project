@@ -5,18 +5,20 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QUrl, Qt, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QFrame,
     QLabel,
     QListWidget,
     QProgressBar,
+    QScrollArea,
     QSizePolicy,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
 
-from praxis.gui.render import parse_read_link
+from praxis.gui.render import DOCUMENT_STYLE, WIDGET_STYLE, parse_read_link
 from praxis.gui.tasks import TaskRunner
 
 OpenReading = Callable[[str, int], None]
@@ -28,16 +30,31 @@ def lock_while_busy(runner: TaskRunner, *widgets: QWidget) -> None:
     runner.busy_changed.connect(lambda busy: [w.setEnabled(not busy) for w in widgets])
 
 
-def result_browser(open_reading: OpenReading | None = None) -> QTextBrowser:
-    """A pane for results whose passage links (``render.read_link``)
-    open the text on the library page."""
+def result_browser(open_reading: OpenReading | None = None,
+                   on_link: Callable[[str], None] | None = None) -> QTextBrowser:
+    """A pane for results (``praxis.gui.results``). Its links: a passage
+    link (``render.read_link``) opens the text on the library page; ``#…``
+    scrolls to that part of the result (a citation to its passage, the
+    "Jump to" bar to a section); a web address opens in the browser; any
+    other goes to ``on_link`` (a learning path's step actions)."""
     browser = QTextBrowser()
     browser.setOpenLinks(False)
+    browser.setStyleSheet(WIDGET_STYLE)
+    browser.document().setDefaultStyleSheet(DOCUMENT_STYLE)
+    browser.document().setDocumentMargin(14)
 
     def clicked(url: QUrl) -> None:
-        target = parse_read_link(url.toString())
-        if target is not None and open_reading is not None:
-            open_reading(*target)
+        text = url.toString()
+        target = parse_read_link(text)
+        if target is not None:
+            if open_reading is not None:
+                open_reading(*target)
+        elif not url.scheme() and url.fragment():
+            browser.scrollToAnchor(url.fragment())
+        elif url.scheme() in ("http", "https"):
+            QDesktopServices.openUrl(url)
+        elif on_link is not None:
+            on_link(text)
 
     browser.anchorClicked.connect(clicked)
     return browser
@@ -63,6 +80,7 @@ class Card(QFrame):
     def __init__(self, title: str, details: str = "", body: str = "") -> None:
         super().__init__()
         self.setObjectName("card")
+        self.key = ""  # what the card stands for, in a CardList
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setStyleSheet(CARD_STYLE)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
@@ -115,3 +133,54 @@ def heading(text: str) -> QLabel:
     label = QLabel(text)
     label.setStyleSheet("font-size: 20px; font-weight: 800; letter-spacing: 1px;")
     return label
+
+
+SELECTED_CARD_STYLE = """
+QFrame#card { background: #f2dcd3; border: 1px solid #b71c1c; border-radius: 6px; }
+QFrame#card QLabel { background: transparent; border: none; }
+"""
+
+
+class CardList(QScrollArea):
+    """Cards one under another, scrolling, one of them selectable: the
+    news page's events. Clicking a card selects it and emits ``chosen``
+    with the card's ``key``."""
+
+    chosen = Signal(str)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        content = QWidget()
+        self._layout = QVBoxLayout(content)
+        self._layout.setContentsMargins(0, 0, 8, 0)
+        self._layout.setSpacing(8)
+        self._layout.addStretch()
+        self.setWidget(content)
+        self.cards: list[Card] = []
+        self.selected: str | None = None
+
+    def set_cards(self, cards: list[tuple[str, Card]]) -> None:
+        for card in self.cards:
+            card.deleteLater()
+        self.cards = []
+        self.selected = None
+        for key, card in cards:
+            card.key = key
+            # Grow to fit the wrapped text; the default (Maximum) squeezes
+            # the labels together when the list is narrow.
+            card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+            card.clicked.connect(lambda key=key: self.select(key))
+            self._layout.insertWidget(self._layout.count() - 1, card)
+            self.cards.append(card)
+
+    def count(self) -> int:
+        return len(self.cards)
+
+    def select(self, key: str) -> None:
+        self.selected = key
+        for card in self.cards:
+            card.setStyleSheet(SELECTED_CARD_STYLE if card.key == key else CARD_STYLE)
+        self.chosen.emit(key)

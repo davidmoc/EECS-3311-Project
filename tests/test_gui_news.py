@@ -42,10 +42,11 @@ def test_fetching_shows_event_cards_with_their_ai_summary(gui):
     page.fetch_button.click()
 
     assert page.event_list.count() == 1
-    card = page.event_list.item(0).text()
-    assert card.startswith("Fire at Indonesian candy factory\n")
-    assert "labour · 2 outlets: Wire A, Wire B" in card
-    assert "Summary (AI-generated from the reports): Three workers died [1]" in card
+    card = page.event_list.cards[0]
+    assert card.title.text() == "Fire at Indonesian candy factory"
+    assert card.details.text().endswith("labour · 2 outlets")
+    # The list shortens the summary and drops its citation marks.
+    assert card.body.text() == "AI summary: Three workers died and dozens are missing.\nWire A, Wire B"
     assert page.message.text().startswith("The 1 most widely reported of 1 events (2 reports).")
 
 
@@ -65,12 +66,13 @@ def test_an_opened_event_shows_its_reports_and_can_be_saved(gui):
     page.fetch_button.click()
     event_id = page.dashboard.events[0].id
 
-    page.event_list.itemClicked.emit(page.event_list.item(0))
+    page.event_list.cards[0].clicked.emit()
 
     shown = page.output.toPlainText()
     assert shown.startswith("Fire at Indonesian candy factory")
-    assert "Wire A, " in shown and "Dozens of workers are missing" in shown
-    assert "Account of the event (AI-generated)" in shown
+    assert "[1] Wire A · " in shown and "Dozens of workers are missing" in shown
+    assert "AI-GENERATED  Account of the event" in shown
+    assert page.event_list.selected == str(event_id)
     assert page.selected == event_id and page.save_button.isEnabled()
 
     page.save_button.click()

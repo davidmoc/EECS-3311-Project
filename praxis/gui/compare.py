@@ -125,7 +125,7 @@ class CompareView(QWidget):
         document_ids, subject = self.chosen(), self.subject.text().strip()
 
         def done(comparison: Any) -> None:
-            self.output.setMarkdown(results.comparison(comparison))
+            self.output.setHtml(results.comparison(comparison))
             self.message.clear()
             self.refresh()
 
@@ -137,7 +137,7 @@ class CompareView(QWidget):
 
     def open_comparison(self, comparison_id: UUID) -> None:
         try:
-            self.output.setMarkdown(results.comparison(self._controller.open(comparison_id)))
+            self.output.setHtml(results.comparison(self._controller.open(comparison_id)))
             self.message.clear()
         except Exception as exc:
             self.message.setText(f"Error: {describe_error(exc)}")

@@ -21,10 +21,10 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from PySide6.QtCore import QPoint, QTimer, QUrl, Signal
-from PySide6.QtGui import QTextDocument
 from PySide6.QtWidgets import QTextBrowser
 
 from praxis.documents import Annotation, AnnotationType, Document, Passage
+from praxis.gui.render import markdown_html
 
 ASK_SCHEME = "ask"
 COLUMN_WIDTH = 760  # pixels: lines much longer than this are hard to follow
@@ -109,17 +109,6 @@ def annotation_html(annotation: Annotation) -> str:
     return (f'<table width="100%" cellpadding="12" cellspacing="0" '
             f'style="margin-left:32px; margin-bottom:16px; background-color:{ANNOTATION_PAPER};">'
             f'<tr><td style="color:{ANNOTATION_INK};">{"".join(rows)}</td></tr></table>')
-
-
-def markdown_html(markdown: str) -> str:
-    """The model writes Markdown; Qt converts it to its own HTML. Only the
-    body is kept, so the box's colour and font apply to it."""
-    document = QTextDocument()
-    document.setMarkdown(markdown.strip())
-    converted = document.toHtml()
-    start = converted.find(">", converted.find("<body")) + 1
-    end = converted.rfind("</body>")
-    return converted[start:end] if start > 0 and end > start else html.escape(markdown)
 
 
 class ReaderPane(QTextBrowser):

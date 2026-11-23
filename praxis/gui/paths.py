@@ -1,7 +1,8 @@
 """The learning paths page: stored paths and progress through them (F08,
 UC08 steps 7–8).
 
-Marking a step done or already known publishes ``PrerequisiteMarkedKnown``,
+Each step is marked from the path itself: its "Mark done", "I already
+know this", "Skip" and "Undo" links. Marking a step done or already known publishes ``PrerequisiteMarkedKnown``,
 so the reader model records the topic as known (SD07's Observer), exactly
 as ``praxis path mark`` does. Skipping publishes nothing.
 """
@@ -12,12 +13,8 @@ from uuid import UUID
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox,
-    QHBoxLayout,
     QLabel,
     QListWidgetItem,
-    QPushButton,
-    QSpinBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -25,19 +22,12 @@ from PySide6.QtWidgets import (
 
 from praxis.app import Application
 from praxis.gui import results
+from praxis.gui.render import notice
 from praxis.gui.tasks import TaskRunner, describe_error
 from praxis.gui.widgets import OpenReading, item_list, lock_while_busy, result_browser
 from praxis.persistence.learning_paths import LearningPathSummary
 from praxis.reader_model.events import PrerequisiteMarkedKnown
 from praxis.reading import LearningPath, StepStatus
-
-STATUS_CHOICES = (
-    ("done", StepStatus.DONE),
-    ("already known", StepStatus.KNOWN),
-    ("skipped", StepStatus.SKIPPED),
-    ("to do", StepStatus.TODO),
-)
-
 
 class PathsController:
     def __init__(self, application: Application) -> None:
@@ -67,25 +57,13 @@ class PathsView(QWidget):
         self.path_list.itemClicked.connect(
             lambda item: self.open_path(UUID(item.data(Qt.ItemDataRole.UserRole)))
         )
-        self.output = result_browser(open_reading)
-        self.step_box = QSpinBox()
-        self.step_box.setPrefix("Step ")
-        self.status_box = QComboBox()
-        for label, status in STATUS_CHOICES:
-            self.status_box.addItem(label, status)
-        self.mark_button = QPushButton("Mark")
-        self.mark_button.clicked.connect(self.mark)
-        row = QHBoxLayout()
-        for widget in (self.step_box, self.status_box, self.mark_button):
-            row.addWidget(widget)
-        row.addStretch()
+        self.output = result_browser(open_reading, self._link)
         self.message = QLabel()
         self.message.setWordWrap(True)
 
         right = QWidget()
         right_layout = QVBoxLayout(right)
         right_layout.addWidget(self.output, stretch=1)
-        right_layout.addLayout(row)
         right_layout.addWidget(self.message)
         splitter = QSplitter()
         splitter.addWidget(self.path_list)
@@ -93,8 +71,8 @@ class PathsView(QWidget):
         splitter.setStretchFactor(1, 3)
         QVBoxLayout(self).addWidget(splitter)
 
+        self._runner = runner
         lock_while_busy(runner, self.path_list)
-        runner.busy_changed.connect(lambda busy: self.mark_button.setEnabled(not busy and self.path is not None))
         self.refresh()
 
     def refresh(self) -> None:
@@ -105,8 +83,7 @@ class PathsView(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, str(summary.id))
             self.path_list.addItem(item)
         if not summaries:
-            self.output.setMarkdown("No learning paths yet. Build one on the Research page.")
-        self.mark_button.setEnabled(self.path is not None)
+            self.output.setHtml(notice("No learning paths yet. Build one on the Research page."))
 
     def open_path(self, path_id: UUID) -> None:
         try:
@@ -114,16 +91,23 @@ class PathsView(QWidget):
         except Exception as exc:
             self.message.setText(f"Error: {describe_error(exc)}")
 
-    def _show(self, path: LearningPath) -> None:
+    def _show(self, path: LearningPath, keep_position: bool = False) -> None:
+        """Show ``path``; after marking a step, at the same place."""
         self.path = path
-        self.output.setMarkdown(results.learning_path(path))
-        self.step_box.setRange(1, max(1, len(path.steps)))
-        self.mark_button.setEnabled(bool(path.steps))
+        position = self.output.verticalScrollBar().value()
+        self.output.setHtml(results.learning_path(path, interactive=True))
+        if keep_position:
+            self.output.verticalScrollBar().setValue(position)
 
-    def mark(self) -> None:
+    def _link(self, url: str) -> None:
+        """A step's "Mark done", "I already know this", "Skip" or "Undo"."""
+        action = results.parse_step_link(url)
+        if action is not None and not self._runner.busy:
+            self.mark(*action)
+
+    def mark(self, step: int, status: StepStatus) -> None:
         if self.path is None:
             return
-        step, status = self.step_box.value(), self.status_box.currentData()
         try:
             path = self._controller.mark(self.path.id, step, status)
         except Exception as exc:
@@ -134,5 +118,5 @@ class PathsView(QWidget):
         if status in (StepStatus.DONE, StepStatus.KNOWN):
             note += f" Your reader model now counts you as knowing {name}."
         self.message.setText(note)
-        self._show(path)
+        self._show(path, keep_position=True)
         self.refresh()

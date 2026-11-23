@@ -7,15 +7,14 @@ Stage 1's ``NewsView`` and ``NewsController`` (SD03).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QListWidgetItem,
     QPushButton,
     QSpinBox,
     QSplitter,
@@ -26,10 +25,46 @@ from PySide6.QtWidgets import (
 from praxis.app import Application
 from praxis.gui import results
 from praxis.gui.tasks import TaskRunner, describe_error
-from praxis.gui.widgets import OpenReading, item_list, lock_while_busy, result_browser
+from praxis.gui.render import RED, notice, shorten
+from praxis.gui.widgets import Card, CardList, OpenReading, lock_while_busy, result_browser
+from praxis.news.events import Event, Grouping, SummaryStatus
 from praxis.news.service import Dashboard
 
+SUMMARY_CHARS = 200
+_CITATIONS = re.compile(r"\s*\[\d+(?:\s*,\s*\d+)*\]")
 EMPTY = "No current news is stored. Press “Fetch the latest news”."
+
+
+def event_card(event: Event) -> Card:
+    """F01: one dashboard event: headline, when and who reported it, how
+    sure the grouping is, and the AI summary, shortened (the event's page
+    has the rest)."""
+    details = [f"{event.last_date:%b %d}" if event.last_date else "undated"]
+    details += list(event.categories[:2])
+    outlets = event.outlets
+    details.append(f"{len(outlets)} outlet{'s' if len(outlets) != 1 else ''}")
+    lines = []
+    if event.is_summarized:
+        # Citation marks mean nothing in the list; the event's page has them.
+        summary = " ".join(_CITATIONS.sub("", event.summary).split())
+        lines.append("AI summary: " + shorten(summary, SUMMARY_CHARS))
+    elif event.summary_status is SummaryStatus.HEADLINES_ONLY:
+        lines.append("No summary; open it to read the reports.")
+    lines.append(", ".join(outlets))
+    card = Card(event.headline, " · ".join(details), "\n".join(lines))
+    flag = ""
+    if event.grouping is Grouping.SINGLE_REPORT:
+        flag = "Single report: no other outlet in the feeds has reported it."
+    elif event.grouping is Grouping.UNCERTAIN:
+        flag = "Grouping uncertain: these reports may not all be about one event."
+    if event.note:
+        flag = f"{flag} {event.note}".strip()
+    if flag:
+        warning = QLabel(flag)
+        warning.setWordWrap(True)
+        warning.setStyleSheet(f"color: {RED}; font-size: 12px;")
+        card.add(warning)
+    return card
 
 
 class NewsController:
@@ -78,10 +113,9 @@ class NewsView(QWidget):
             top.addWidget(widget)
         top.addStretch()
 
-        self.event_list = item_list()
-        self.event_list.itemClicked.connect(
-            lambda item: self.open_event(UUID(item.data(Qt.ItemDataRole.UserRole)))
-        )
+        self.event_list = CardList()
+        self.event_list.chosen.connect(lambda key: self.open_event(UUID(key)))
+        self.event_list.setMinimumWidth(320)
         self.output = result_browser(open_reading)
         self.research_button = QPushButton("Research it (F03)")
         self.research_button.clicked.connect(
@@ -122,7 +156,7 @@ class NewsView(QWidget):
         lock_while_busy(runner, self.show_button, self.fetch_button, self.event_list)
         runner.busy_changed.connect(lambda _busy: self._enable_actions())
         self._enable_actions()
-        self.output.setMarkdown("Show the stored news, or fetch the latest from the feeds.")
+        self.output.setHtml(notice("Show the stored news, or fetch the latest from the feeds."))
 
     def _enable_actions(self) -> None:
         for button in self._actions:
@@ -140,11 +174,7 @@ class NewsView(QWidget):
         """List the dashboard's events. The home page hands over the
         dashboard it fetched at start-up, so it is not fetched twice."""
         self.dashboard = dashboard
-        self.event_list.clear()
-        for event in dashboard.events:
-            item = QListWidgetItem(results.event_card(event))
-            item.setData(Qt.ItemDataRole.UserRole, str(event.id))
-            self.event_list.addItem(item)
+        self.event_list.set_cards([(str(event.id), event_card(event)) for event in dashboard.events])
         notes = list(dashboard.warnings)
         if dashboard.events:
             reports = sum(len(e.reports) for e in dashboard.events)
@@ -176,8 +206,8 @@ class NewsView(QWidget):
             return
         self.message.setText(f"Saved to your workspace: {saved.title}")
 
-    def _show(self, markdown: str) -> None:
-        self.output.setMarkdown(markdown)
+    def _show(self, rich_text: str) -> None:
+        self.output.setHtml(rich_text)
         self.message.clear()
 
     def _run(self, description: str, work: Callable[[], Any], done: Callable[[Any], None]) -> None:

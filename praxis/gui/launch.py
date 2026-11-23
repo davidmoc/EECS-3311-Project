@@ -42,7 +42,10 @@ def build_window(application: Application, runner: TaskRunner) -> MainWindow:
     ))
 
     window.add_page("News", NewsView(NewsController(application), runner, open_reading))
-    window.add_page("Research", ResearchView(ResearchController(application), runner, open_reading))
+    window.add_page("Research", ResearchView(
+        ResearchController(application), runner, open_reading,
+        open_path=lambda path_id: window.show_page("Learning paths").open_path(path_id),
+    ))
     window.add_page("Past research", SessionsView(SessionsController(application), runner, open_reading))
     window.add_page("Compare", CompareView(CompareController(application), runner, open_reading))
     window.add_page("Learning paths", PathsView(PathsController(application), runner, open_reading))

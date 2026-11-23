@@ -28,6 +28,7 @@ def test_two_texts_are_compared_and_the_comparison_is_kept(gui):
     assert shown.startswith("Comparing on: the bourgeoisie")
     assert "Source A: Karl Marx and Friedrich Engels, “The Communist Manifesto”" in shown
     assert "Comparability (AI-assessed): comparable" in shown
+    assert "Shared ground" in shown and " A   B  Both treat the bourgeoisie" in shown
     assert page.history.count() == 1
     # Ticks survive the refresh after comparing.
     assert len(page.chosen()) == 2

@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID
 
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -117,9 +118,11 @@ class ResearchView(QWidget):
         controller: ResearchController,
         runner: TaskRunner,
         open_reading: OpenReading | None = None,
+        open_path: Callable[[UUID], None] | None = None,
     ) -> None:
         """``open_reading(document_id, paragraph)`` shows a text on the
-        library page when a passage link is clicked."""
+        library page when a passage link is clicked; ``open_path`` shows a
+        learning path just built on its own page."""
         super().__init__()
         self._controller = controller
         self._runner = runner
@@ -155,7 +158,8 @@ class ResearchView(QWidget):
             options.addWidget(widget)
         options.addStretch()
 
-        self.output = result_browser(open_reading)
+        self._open_path = open_path
+        self.output = result_browser(open_reading, self._link)
         self.message = QLabel()
         self.message.setWordWrap(True)
 
@@ -206,7 +210,7 @@ class ResearchView(QWidget):
 
         def done(result: Any) -> None:
             self.result = result
-            self.output.setMarkdown(RENDERERS[mode.key](result))
+            self.output.setHtml(RENDERERS[mode.key](result))
             self.message.clear()
             self.save_button.setEnabled(self._can_save())
 
@@ -216,6 +220,11 @@ class ResearchView(QWidget):
 
         self.message.setText("Working… finding texts on the web and asking the model can take a minute or two.")
         self._runner.run(mode.label, lambda: method(text, preferences, **extra), done, failed)
+
+    def _link(self, url: str) -> None:
+        prefix = results.PATH_SCHEME + "/"
+        if url.startswith(prefix) and self._open_path is not None:
+            self._open_path(UUID(url[len(prefix):]))
 
     def _can_save(self) -> bool:
         if isinstance(self.result, AgentResponse):
