@@ -214,7 +214,7 @@ class ResearchView(QWidget):
             self.output.clear()
             self.message.setText(f"Error: {describe_error(exc)}")
 
-        self.message.setText("Working… model requests can take a minute.")
+        self.message.setText("Working… finding texts on the web and asking the model can take a minute or two.")
         self._runner.run(mode.label, lambda: method(text, preferences, **extra), done, failed)
 
     def _can_save(self) -> bool:

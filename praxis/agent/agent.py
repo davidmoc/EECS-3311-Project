@@ -66,6 +66,7 @@ from praxis.research.situation import ConcreteSituation, ConcreteSituationBuilde
 from praxis.tools import ToolManager
 
 if TYPE_CHECKING:  # only for type hints: praxis.tools imports praxis.persistence
+    from praxis.discovery import DiscoveryReport, SourceDiscoveryService
     from praxis.persistence.comparisons import ComparisonRepository, ComparisonSummary
     from praxis.persistence.research import ResearchRepository, ResearchSessionSummary
 
@@ -188,11 +189,14 @@ class PoliticalResearchAgent:
         builder: ConcreteSituationBuilder | None = None,
         research_repository: ResearchRepository | None = None,
         comparison_repository: ComparisonRepository | None = None,
+        discovery: SourceDiscoveryService | None = None,
     ) -> None:
         """``llm`` may be None: the agent then still retrieves passages but
         cannot assess or explain them. Without ``research_repository``,
         research results are not stored and cannot be continued; without
-        ``comparison_repository``, comparisons are not stored."""
+        ``comparison_repository``, comparisons are not stored. With
+        ``discovery``, research, questions, history and analysis first look
+        beyond the library for texts on the subject and add them to it."""
         self._tools = tools
         self._profiles = profiles
         self._personalization = PersonalizationService(profiles)
@@ -204,6 +208,25 @@ class PoliticalResearchAgent:
         self._builder = builder or ConcreteSituationBuilder()
         self._repository = research_repository
         self._comparisons = comparison_repository
+        self._discovery = discovery
+
+    def _discover(self, topic: str, subtopics: list[str] = ()) -> DiscoveryReport | None:
+        """Add texts on ``topic`` from beyond the library, if discovery is on."""
+        if self._discovery is None:
+            return None
+        return self._discovery.discover(topic, list(subtopics))
+
+    def _record_discovery(self, session: ResearchSession, report: DiscoveryReport | None) -> None:
+        if report is None:
+            return
+        session.tokens_used += report.tokens_used
+        session.record_step(StepRecord(
+            f"Look beyond the library for texts on this ({_texts_added(report)})",
+            bool(report.documents) or not report.failures,
+            error=None if report.documents or not report.failures else report.failures[0][1],
+        ))
+        if note := report.note():
+            session.add_warning(note)
 
     # --- F03: multi-step research --------------------------------------------
 
@@ -229,6 +252,9 @@ class PoliticalResearchAgent:
         session = ResearchSession(objective)
         profile = self._personalization.profile_for(preferences)
         plan = self._planner.create_initial_plan(session, profile)
+        self._record_discovery(
+            session, self._discover(session.objective, [c.key[1] for c in plan.pending])
+        )
         context = ResearchContext(session, self._tools, profile=profile)
         if reports:
             numbers = []
@@ -283,6 +309,10 @@ class PoliticalResearchAgent:
         if focus is not None:
             session.add_focus(focus)
             commands = self._planner.plan_follow_up(session, focus, profile)
+            report = self._discover(
+                f"{focus} (in the context of: {session.objective})", [c.key[1] for c in commands]
+            )
+            self._record_discovery(session, report)
         # Not `if previous.plan`: a plan with nothing queued has length 0, so is falsy.
         taken = previous.plan.taken if previous.plan is not None else []
         plan = ResearchPlan(session.objective, [*commands, *unfinished], taken=taken)
@@ -528,15 +558,21 @@ class PoliticalResearchAgent:
             else:
                 searches = list(plan.searches)
         searches.append(("the topic as asked", topic))
+        report = self._discover(f"the history of {topic}", [k for _, k in searches[:-1]])
 
         session = ResearchSession(topic)
         context = ResearchContext(
             session, self._tools, profile=profile, max_sources=HISTORY_SOURCES, library_only=True
         )
         steps = []
+        if report is not None:
+            usage.tokens += report.tokens_used
+            steps.append(f"Look beyond the library for texts on this  ({_texts_added(report)})")
+            if note := report.note():
+                warnings.append(note)
         if reports:
-            for report in reports[:MAX_EVENT_REPORTS]:
-                source = context.corpus.add_passage(report, report_passage(report))
+            for news in reports[:MAX_EVENT_REPORTS]:
+                source = context.corpus.add_passage(news, report_passage(news))
                 context.purposes[source.number] = EVENT_PURPOSE
             steps.append(f"Start from the event's news reports  {_added(len(context.corpus))}")
         done: set[tuple[type, str]] = set()
@@ -644,9 +680,13 @@ class PoliticalResearchAgent:
             ResearchSession(issue), self._tools, profile=profile, library_only=True
         )
         terms = self._search_terms(issue, usage)
+        notes = self._discovery_notes(issue, terms, usage)
         for query in ([" ".join(terms)] if terms else []) + [issue]:
             RetrieveEvidenceCommand(query).execute(context)
-        return self._analyse(issue, framework, context, usage)
+        analysis = self._analyse(issue, framework, context, usage)
+        if notes:
+            analysis = replace(analysis, warnings=(*notes, *analysis.warnings))
+        return analysis
 
     def analyze_research(
         self,
@@ -939,6 +979,7 @@ class PoliticalResearchAgent:
         warnings: list[str] = []
 
         terms = self._search_terms(question, usage)
+        warnings.extend(self._discovery_notes(question, terms, usage))
         corpus = self._retrieve(question, terms, warnings)
         if corpus.is_empty:
             return AgentResponse(
@@ -999,6 +1040,16 @@ class PoliticalResearchAgent:
 
     # --- steps ---------------------------------------------------------------
 
+    def _discovery_notes(self, topic: str, terms: list[str], usage: _Usage) -> list[str]:
+        """Discover texts on ``topic`` and say what was added. The model's
+        search terms are passed as one subtopic: they name what to look for."""
+        report = self._discover(topic, [" ".join(terms)] if terms else [])
+        if report is None:
+            return []
+        usage.tokens += report.tokens_used
+        note = report.note()
+        return [note] if note else []
+
     def _search_terms(self, question: str, usage: _Usage) -> list[str]:
         """Keywords chosen by the model, or none if it cannot help.
 
@@ -1035,6 +1086,11 @@ class PoliticalResearchAgent:
                     return corpus
                 corpus.add_passage(match.document, match.passage)
         return corpus
+
+
+def _texts_added(report: DiscoveryReport) -> str:
+    added = len(report.added)
+    return f"{added} new text{'s' if added != 1 else ''} added to the library"
 
 
 def _added(count: int) -> str:

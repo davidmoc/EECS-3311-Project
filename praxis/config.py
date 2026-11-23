@@ -18,6 +18,9 @@ DEFAULT_MODEL = "gpt-5-mini"
 DEFAULT_DATABASE_PATH = Path("data/praxis.db")
 
 
+_OFF = ("off", "0", "false", "no")
+
+
 class ConfigError(Exception):
     """Raised when required local configuration is missing or invalid."""
 
@@ -28,6 +31,11 @@ class Settings:
     openai_model: str = DEFAULT_MODEL
     openai_base_url: str | None = None
     database_path: Path = DEFAULT_DATABASE_PATH
+    # Look beyond the library (web search, Wikipedia) for texts on what
+    # the reader researches, and add them to it. Off unless configured, so
+    # code that builds Settings directly (tests) never touches the network;
+    # load_settings turns it on unless PRAXIS_WEB_DISCOVERY is "off".
+    web_discovery: bool = False
 
     def require_api_key(self) -> str:
         """Return the API key, or explain how to configure one.
@@ -71,4 +79,5 @@ def load_settings(
         openai_model=get("OPENAI_MODEL") or DEFAULT_MODEL,
         openai_base_url=get("OPENAI_BASE_URL"),
         database_path=Path(get("PRAXIS_DATABASE_PATH") or DEFAULT_DATABASE_PATH),
+        web_discovery=(get("PRAXIS_WEB_DISCOVERY") or "on").lower() not in _OFF,
     )

@@ -7,6 +7,12 @@ ordered ``LearningPath``. A prerequisite the library has nothing on keeps
 the model's short orientation and is reported as a gap (UC08: "If no
 appropriate reading exists, the system may provide a basic orientation and
 identify the gap").
+
+With a ``SourceDiscoveryService``, texts on the target and each
+prerequisite are first found beyond the library and added to it, so a
+path on a current event or a country is not limited to the classics the
+library already holds. A step's readings come first from the texts found
+for that step, then from the rest of the library.
 """
 
 from __future__ import annotations
@@ -26,11 +32,15 @@ from praxis.reader_model import KnowledgeArea, KnowledgeLevel, ReaderProfile, no
 from praxis.tools import ToolManager
 
 if TYPE_CHECKING:  # praxis.persistence.learning_paths imports this module
+    from praxis.discovery import SourceDiscoveryService
     from praxis.persistence.learning_paths import LearningPathRepository, LearningPathSummary
 
 PASSAGE_SEARCH = "passage_search"
+SOURCE_RETRIEVAL = "source_retrieval"
 READINGS_PER_STEP = 2
 SEARCH_LIMIT = 8
+# Passages searched within each text found for a step.
+FOUND_TEXT_PASSAGES = 2
 
 NO_LLM_ERROR = (
     "No language model is configured (set OPENAI_API_KEY), so prerequisites "
@@ -171,12 +181,15 @@ class PrerequisiteService:
         llm: LLMClient | None = None,
         prompts: PromptBuilder | None = None,
         repository: LearningPathRepository | None = None,
+        discovery: SourceDiscoveryService | None = None,
     ) -> None:
-        """Without ``repository``, paths are built but not stored."""
+        """Without ``repository``, paths are built but not stored; without
+        ``discovery``, readings come only from the library as it is."""
         self._tools = tools
         self._llm = llm
         self._prompts = prompts or PromptBuilder()
         self._repository = repository
+        self._discovery = discovery
 
     # --- stored paths and progress (UC08 steps 7-8) -----------------------
 
@@ -267,6 +280,15 @@ class PrerequisiteService:
         known_topics = sorted(profile.knowledge.areas) if uses_profile else []
 
         prerequisites, tokens = self.identify_prerequisites(target, known_topics)
+        found: dict[str, list[Document]] = {}  # prerequisite name -> texts found for it
+        if self._discovery is not None:
+            report = self._discovery.discover(target, [p.name for p in prerequisites])
+            tokens += report.tokens_used
+            if note := report.note():
+                warnings.append(note)
+            for found_document in report.documents:
+                for topic in found_document.topics:
+                    found.setdefault(topic.lower(), []).append(found_document)
 
         steps: list[LearningStep] = []
         already_known: list[str] = []
@@ -285,7 +307,9 @@ class PrerequisiteService:
                         f"You may already know this: your reading suggests "
                         f"{area.level.name.lower()} level."
                     )
-            step.readings = self._find_readings(prerequisite, document, offered, warnings)
+            step.readings = self._find_readings(
+                prerequisite, document, offered, warnings, found.get(prerequisite.name.lower(), [])
+            )
             offered.update((c.document_id, c.locator) for c in step.readings)
             steps.append(step)
 
@@ -318,21 +342,36 @@ class PrerequisiteService:
         target: Document | None,
         offered: set[tuple[UUID, str]],
         warnings: list[str],
+        found: list[Document] = (),
     ) -> tuple[Citation, ...]:
         """Up to ``READINGS_PER_STEP`` passages, from different texts where
         possible, never from the target text or the news, and none that an
-        earlier step already offers."""
+        earlier step already offers. Passages of ``found`` (texts found on
+        the web for this step) come first."""
         query = f"{prerequisite.name} {prerequisite.search}".strip()
+        candidates = []
+        for found_document in found:
+            result = self._tools.execute_tool(SOURCE_RETRIEVAL, {
+                "document_id": str(found_document.id), "query": query, "limit": FOUND_TEXT_PASSAGES,
+            })
+            if result.success:
+                candidates.extend(result.items)
         result = self._tools.execute_tool(PASSAGE_SEARCH, {"query": query, "limit": SEARCH_LIMIT})
         if not result.success:
             warnings.append(f"Library search for {prerequisite.name} failed: {result.error}")
-            return ()
-        usable = [
-            match for match in result.items
-            if match.document.kind != NewsArticle.kind
-            and (target is None or match.document.id != target.id)
-            and (match.document.id, match.passage.locator) not in offered
-        ]
+            if not candidates:
+                return ()
+        else:
+            candidates.extend(result.items)
+        usable, keys = [], set(offered)
+        for match in candidates:
+            key = (match.document.id, match.passage.locator)
+            if match.document.kind == NewsArticle.kind or key in keys:
+                continue
+            if target is not None and match.document.id == target.id:
+                continue
+            keys.add(key)
+            usable.append(match)
         # One passage per text first, then fill with the best remaining.
         chosen, seen = [], set()
         for match in usable:

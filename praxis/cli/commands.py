@@ -1081,6 +1081,34 @@ def library_import(
     typer.echo(f"Imported {document.title} [{_short_id(document)}]")
 
 
+@library_app.command("discover")
+def library_discover(
+    topic: Annotated[str, typer.Argument(help="What to find texts on, e.g. 'Libya since 2011'.")],
+    subtopic: Annotated[Optional[list[str]], typer.Option("--subtopic", "-s", help="A narrower part to cover; repeatable.")] = None,
+) -> None:
+    """Find texts on a topic on the web and add them to the library.
+
+    Research, questions, history, analysis and learning paths do this by
+    themselves; this command does it alone.
+    """
+    with session() as application:
+        if application.discovery is None:
+            _fail("Web discovery is off (PRAXIS_WEB_DISCOVERY=off), so nothing can be found beyond the library.")
+        typer.echo(f"Searching {', '.join(application.discovery.finder_names)} for texts on {topic}…")
+        report = application.discovery.discover(topic, subtopic or [])
+    for document in report.added:
+        typer.echo(f"Added   {document.title} — {document.author} [{_short_id(document)}]")
+        typer.echo(f"        {document.source_url}")
+    for document in report.held:
+        typer.echo(f"Had     {document.title} [{_short_id(document)}]")
+    for where, reason in report.failures:
+        typer.secho(f"Skipped {where}: {reason}", fg=typer.colors.YELLOW)
+    typer.echo(f"{len(report.added)} added, {len(report.held)} already in the library, "
+               f"{len(report.failures)} skipped.")
+    if report.tokens_used:
+        typer.echo(f"({report.tokens_used} model tokens)")
+
+
 @library_app.command("search")
 def library_search(
     query: Annotated[str, typer.Argument(help="Words to find in title, author, topics or text.")],

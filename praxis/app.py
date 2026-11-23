@@ -11,13 +11,19 @@ from pathlib import Path
 
 from praxis.agent import PoliticalResearchAgent
 from praxis.config import Settings, load_settings
+from praxis.discovery import (
+    SourceDiscoveryService,
+    SourceFinder,
+    WebSearchSourceFinder,
+    WikipediaSourceFinder,
+)
 from praxis.library import (
     DEFAULT_CATALOGUE,
     LibraryService,
     PublicTextArchiveAdapter,
     directory_fetcher,
 )
-from praxis.llm import LLMClient, OpenAILLMAdapter
+from praxis.llm import LLMClient, OpenAILLMAdapter, OpenAIWebSearchAdapter
 from praxis.news import NewsProvider, RSSNewsAdapter, read_feeds
 from praxis.news.exploration import EventExplorer
 from praxis.news.service import NewsService
@@ -62,6 +68,8 @@ class Application:
     news: NewsService
     # The model the agent and services use, or None if none is configured.
     llm: LLMClient | None = None
+    # Finds texts beyond the library, or None when web discovery is off.
+    discovery: SourceDiscoveryService | None = None
     # False when the caller passed in a database it will close itself.
     owns_database: bool = True
     _closed: bool = field(default=False, repr=False)
@@ -77,11 +85,15 @@ def build_application(
     database: Database | None = None,
     llm: LLMClient | None = None,
     news_providers: list[NewsProvider] | None = None,
+    discovery: SourceDiscoveryService | None = None,
 ) -> Application:
     """``llm`` replaces the configured model (tests pass a fake). Without
     one, the OpenAI adapter is used when an API key is configured; with no
     key the agent still retrieves passages but cannot explain them.
-    ``news_providers`` replaces the feeds in ``data/news/feeds.json``."""
+    ``news_providers`` replaces the feeds in ``data/news/feeds.json``.
+    ``discovery`` replaces the configured source discovery; without one, it
+    is built when ``settings.web_discovery`` is on: Wikipedia always, and
+    web search when an OpenAI key is configured."""
     settings = settings or load_settings()
     owns_database = database is None
     database = database or Database(settings.database_path)
@@ -95,6 +107,13 @@ def build_application(
         tools.register_tool(tool)
     if llm is None and settings.openai_api_key:
         llm = OpenAILLMAdapter.from_settings(settings)
+    if discovery is None and settings.web_discovery:
+        finders: list[SourceFinder] = [WikipediaSourceFinder()]
+        if settings.openai_api_key:
+            # After Wikipedia, so a Wikipedia page both find keeps the clean
+            # API copy rather than a scraped one.
+            finders.append(WebSearchSourceFinder(OpenAIWebSearchAdapter.from_settings(settings)))
+        discovery = SourceDiscoveryService(documents, finders)
     return Application(
         settings=settings,
         database=database,
@@ -106,13 +125,14 @@ def build_application(
             tools, profiles, llm,
             research_repository=SQLResearchRepository(database),
             comparison_repository=SQLComparisonRepository(database),
+            discovery=discovery,
         ),
         annotations=AnnotationService(
             tools, llm, repository=SQLAnnotationRepository(database)
         ),
         recommendations=RecommendationService(tools, llm),
         prerequisites=PrerequisiteService(
-            tools, llm, repository=SQLLearningPathRepository(database)
+            tools, llm, repository=SQLLearningPathRepository(database), discovery=discovery
         ),
         traditions=IdeologicalContextService(tools, library, llm),
         news=NewsService(
@@ -124,6 +144,7 @@ def build_application(
             explorer=EventExplorer(documents, llm),
         ),
         llm=llm,
+        discovery=discovery,
         owns_database=owns_database,
     )
 
