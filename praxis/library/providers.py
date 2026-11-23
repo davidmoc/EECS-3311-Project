@@ -26,8 +26,14 @@ GUTENBERG_LICENSE = "Public domain (Project Gutenberg)"
 _START = re.compile(r"^\*\*\* ?START OF (THE|THIS) PROJECT GUTENBERG[^*]*\*\*\*", re.M)
 _END = re.compile(r"^\*\*\* ?END OF (THE|THIS) PROJECT GUTENBERG[^*]*\*\*\*", re.M)
 _OLD_END = re.compile(r"^End of (the )?Project Gutenberg", re.M | re.I)
-# Volunteer credits and scan notes that open some e-books; not the author's words.
-_CREDIT = re.compile(r"^(Produced by|E-text prepared by|Note: Images of the original pages)\b")
+# Volunteer credits, scan notes and transcribers' notes that open some
+# e-books; not the author's words.
+_CREDIT = re.compile(
+    r"^(Produced by|E-text prepared by|Note: Images of the original pages)\b"
+    # Transcribers' notes on formatting, sometimes boxed in dashes or brackets.
+    r"|^[\s\-\[]*Transcriber[’']?s[’']? notes?\b",
+    re.IGNORECASE,
+)
 # Credits only ever sit at the very start, so later paragraphs are not checked.
 _CREDIT_SEARCH_DEPTH = 5
 _HEADER_FIELD = re.compile(r"^(Title|Author):\s*(.+)$", re.M)

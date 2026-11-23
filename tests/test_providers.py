@@ -157,6 +157,9 @@ def test_directory_fetcher_reads_local_copies(tmp_path):
         "Produced by Odessa Paige Turner and the\nOnline Distributed Proofreading Team",
         "E-text prepared by Odessa Paige Turner and the Project Gutenberg Online",
         "Note: Images of the original pages are available through the Google Books Library Project.",
+        # As they open Gutenberg books 46423 and 41405.
+        "  ------------------------------------------------\n  Transcriber’s Note:\n  +Bold text+ is enclosed within plus signs.",
+        "  [Transcriber's notes:\n  Inconsistent hyphenation and use of umlauts retained.]",
     ],
 )
 def test_volunteer_credits_at_the_start_are_dropped(credit):
