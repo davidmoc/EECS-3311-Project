@@ -505,3 +505,20 @@ platform.openai.com.
 - **Problems met:** qt-material draws a selected row's text in the theme's dark text colour, which is hard to read on the red selection. Overriding it with `color` or a widget-level `selection-color` had no effect; testing qt-material's rules one at a time showed its `QListView::item:selected:focus` rule wins, and Qt takes a selected item's text colour from `selection-color` on the item rule. `theme.py` adds that rule, giving cream text on red.
 - **Human contribution:** Chose the library approach and the aesthetic.
 - **Outcome:** One code commit with this log entry.
+
+### 2026-11-23 — GUI overhaul: home page and reader
+
+- **Task:** Overhaul the GUI's user experience, starting with the home and library pages.
+- **Input/Instruction:** The user specified the home page (news cards fetched on start-up, readings to return to, the current learning path with progress and Continue) and the library (only the list until a text is chosen; then a reader that fills the page, shows the text as one continuous scroll, and replaces the controls below it with an "Ask about" menu on each paragraph number that shows a request in progress and then the annotation inline in another colour). The rest was left to the AI's judgement.
+- **AI contribution:** Added `praxis/gui/reader.py` (`ReaderPane`, `ReaderText`): the whole text as Qt rich text, paragraph numbers as links, stored and new annotations in a tinted box with their own ink under their paragraph, a note while one is being written and the error if it fails, a centred 760-pixel serif column, and progress taken from the paragraph at the bottom of the screen once scrolling pauses. Rewrote `praxis/gui/library.py` around a list view and a reader view; `ReadingController.open_text` replaces the ten-paragraph `open_page`, and `record_progress` publishes `DocumentRead`. Rewrote `praxis/gui/home.py` (`HomeController.news`, `readings`, `current_path`) with three sections of cards, and added `widgets.Card`. `launch.run` fetches the news when the window opens; the dashboard is handed to the News page (`NewsView.show_dashboard`). Removed `render.paragraphs` and `render.annotation_markdown`, no longer used. Updated the README's page descriptions. 801 automated tests (new: `tests/test_gui_home.py` and the library tests). Home, the library list, the reader with a finished and a pending annotation, and the menu were rendered offscreen with the theme and looked at.
+- **Problems met:**
+  - In the first render the reader's text was red and in Roboto: qt-material styles text browsers with the theme colour and font. The reader now sets its own stylesheet (black Georgia on paper) and colours paragraphs explicitly.
+  - An hourglass emoji in the "being written" note drew as a broken glyph; it is plain text now.
+  - Tests compared `toPlainText()` with the no-break spaces after each paragraph number, which Qt turns into ordinary spaces there (the document's blocks keep them, which is what the reader relies on). Tests corrected.
+  - Two AI-written home tests called a page's methods without navigating to Home, so the page never refreshed; they now navigate as a user would.
+- **Design changes from Stage 1 introduced here:**
+  - Stage 1's `ReaderView` paged through a text; the reader now scrolls the whole text and records the furthest paragraph seen, so a saved text resumes from where scrolling stopped rather than after a page.
+  - SD04's annotation request starts from the paragraph in the reader (its "Ask about" menu) instead of a separate form below it. Saving a paragraph (F15) moved into the same menu.
+  - The home page draws on F01, F13's reading history and F08 together; it calls the same services as the News and Learning paths pages and adds no new ones.
+- **Human contribution:** Requested the change and specified the home and library designs.
+- **Outcome:** Two code commits and this documentation commit.
