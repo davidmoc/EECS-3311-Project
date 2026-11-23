@@ -456,3 +456,13 @@ platform.openai.com.
   - Reading a page in the GUI records progress through the `LearningEventBus`, as `library read` does. Resetting the whole profile is left to the CLI (`profile reset`), which asks for confirmation.
 - **Human contribution:** None on this slice yet; the code has not been reviewed.
 - **Outcome:** Four code commits and this documentation commit.
+
+### 2026-11-22 — Graphical interface, second slice (in progress): research and past research
+
+- **Task:** Bring the agent's requests into the GUI.
+- **Input/Instruction:** Fourth of the five slices requested.
+- **AI contribution:** Added `praxis/gui/results.py` (each feature's result as Markdown, following the CLI's labels), `research.py` (`ResearchController`, `ResearchView`: ask F04, research F03, history F09, analysis F11, traditions F12, readings F07, learning paths F08, with per-request detail and "general" options from F14), `sessions.py` (`SessionsController`, `SessionsView`: reopen stored research, continue it with a focus, and run analysis, text comparison or traditions on it), and `widgets.py` (shared `lock_while_busy` and `result_browser`). Passage links in results open the text at that paragraph on the library page. 780 automated tests.
+- **Problems met:** An AI-written GUI test switched the model off by setting a private attribute; it was replaced by a test of a real follow-up (comparing a session's texts when the model's reply is unreadable).
+- **Not yet done:** No live run of the GUI pages against the model; marking learning-path steps in the GUI; README section for these pages.
+- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Outcome:** Two code commits and this documentation commit so far.
