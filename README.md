@@ -58,6 +58,20 @@ praxis` will work.
 | `OPENAI_MODEL` | no | Chat model to use (default `gpt-5-mini`; a mini-tier model is enough) |
 | `OPENAI_BASE_URL` | no | Use another OpenAI-compatible provider |
 | `PRAXIS_DATABASE_PATH` | no | Where your data is stored (default `data/praxis.db`) |
+| `PRAXIS_WEB_DISCOVERY` | no | `off` stops Praxis looking beyond the library for texts (default on) |
+
+### Beyond the library
+
+The library is not a limit. When you ask a question, research, trace a
+history, analyse an issue or build a learning path, Praxis first looks on
+the web for texts on that subject (articles, analyses, reports and
+primary documents, including Marxist and left publications, plus
+Wikipedia background), saves the new ones to your library tagged with
+the topic, and then works from the library as usual. The result says
+which texts were added. Web search needs an OpenAI key and adds about
+30–60 seconds; Wikipedia works without a key. Texts from the web are
+shown and quoted in excerpts with a link to the original; Wikipedia
+articles (CC BY-SA) are shown in full.
 
 ---
 
@@ -206,6 +220,7 @@ python -m praxis library read 59983f05 --find "hitherto existing"
 python -m praxis library read abdc2552 --start 259 --count 1 --annotations
 python -m praxis library download 59983f05 --to downloads         # save as .txt
 python -m praxis library import 1346 -t history                   # any Project Gutenberg book number
+python -m praxis library discover "Libya since 2011" -s "oil" -s "NATO war"   # find texts on the web and add them
 
 python -m praxis annotate abdc2552 259 --type historical-context  # F06
 python -m praxis annotations list abdc2552
@@ -424,10 +439,12 @@ personalization is off, you are told the ranking rests on the topic alone.
 
 `path build` asks the model what the target assumes (concepts, events,
 theories, earlier texts), in learning order, and drops what you said you
-know (`profile know`). Each remaining step gets up to two library
-passages, never from the target text and never repeated across steps; a
-step the library has nothing on gets a short AI orientation and is
-reported as a gap. Steps are "needed" only when the model calls them
+know (`profile know`). Texts on the target and each step are then found
+on the web and added to the library (see "Beyond the library"). Each
+remaining step gets up to two passages, first from the texts found for
+that step, then from the rest of the library, never from the target text
+and never repeated across steps; a step nothing is found for gets a short
+AI orientation and is reported as a gap. Steps are "needed" only when the model calls them
 essential and your knowledge is on record; knowledge inferred from your
 reading turns a step into a suggestion rather than dropping it. Paths
 are stored; `path mark` records each step as done, already known or
@@ -541,11 +558,12 @@ API key and no network access.
 | `praxis/comparison/` | `SourceComparison`, `SourceProfile`, `CompareSourcesCommand` (F10) |
 | `praxis/news/` | `NewsProvider`, `RSSNewsAdapter`, `NewsService`, `EventClusterer`, `NewsSummaryService`, `Event` (F01, F02) |
 | `praxis/library/` | `LibraryService`, `DocumentProvider`, Gutenberg adapter (F05) |
+| `praxis/discovery/` | `SourceDiscoveryService`, `SourceFinder` (web search, Wikipedia), `WebPageReader`: finding texts beyond the library |
 | `praxis/documents/` | Documents, passages, citations, annotations |
 | `praxis/reader_model/` | Reader profile, its service, event bus and updater, `PersonalizationService` (F13, F14) |
 | `praxis/workspace/` | Saved items, workspace and its service (F15) |
 | `praxis/tools/` | Agent tools, tool manager and tool factory |
-| `praxis/llm/` | `LLMClient` interface and the OpenAI adapter |
+| `praxis/llm/` | `LLMClient` and `WebSearchClient` interfaces and their OpenAI adapters |
 | `praxis/persistence/` | SQLite database and repositories |
 | `praxis/cli/` | Typer command-line interface |
 | `praxis/gui/` | PySide6 graphical interface: main window, views and their controllers, task runner, qt-material theme |

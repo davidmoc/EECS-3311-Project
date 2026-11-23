@@ -522,3 +522,19 @@ platform.openai.com.
   - The home page draws on F01, F13's reading history and F08 together; it calls the same services as the News and Learning paths pages and adds no new ones.
 - **Human contribution:** Requested the change and specified the home and library designs.
 - **Outcome:** Two code commits and this documentation commit.
+
+### 2026-11-23 — Finding texts beyond the library
+
+- **Task:** Stop research and learning paths being limited to the texts already in the library.
+- **Input/Instruction:** The user reported that a learning path for Libya had good steps but pointed only to foundational Marxist texts, and asked that researching a question or building a learning path find genuinely relevant articles, books and other texts on the web, add them to the library and use them. The design was left to the AI.
+- **AI contribution:** Added `praxis/discovery/`: `SourceFinder` (Strategy) with `WebSearchSourceFinder` (a model with web search, asked for substantive, freely readable texts across perspectives, including Marxist and left outlets) and `WikipediaSourceFinder` (Wikipedia's API; CC BY-SA, so shown in full); `WebPageReader`, which keeps an HTML page's article prose and refuses paywalled, script-built and PDF pages; and `SourceDiscoveryService`, which runs the finders in parallel, skips pages already stored, downloads the rest in parallel and saves them as `Article`s tagged with the topic. Web pages are licensed as not reproducible, so they are quoted in excerpts with a link, like news. Added `WebSearchClient` and `OpenAIWebSearchAdapter` (Responses API `web_search` tool) beside `LLMClient`. `PoliticalResearchAgent` (research and its continuation, ask, history, analyze) and `PrerequisiteService` discover texts first; a learning-path step reads first from the texts found for it. Each result says what was added. Added `praxis library discover` and the `PRAXIS_WEB_DISCOVERY` setting. 824 automated tests (new: `tests/test_discovery.py`, `tests/test_discovery_features.py`), all offline. Tried live: a learning path for "Libya" cited Wikipedia on Ottoman Tripolitania and Italian colonisation, Tricontinental on NATO's 2011 war and MERIP on settler colonialism; `ask` on who backs the RSF in Sudan answered from Peoples Dispatch, The Guardian and Wikipedia in 50 seconds.
+- **Problems met:**
+  - The first live learning path took over four minutes, most of it the web search at the model's default reasoning effort. At low effort it took about 30 seconds with similar results; the adapter now asks for low effort and retries without it for models that reject the setting.
+  - A Wikipedia page found by both finders was stored from the scraped HTML (with "[2][3]" reference marks) because the web finder ran first. Wikipedia now runs first, so its clean API copy is kept.
+  - The first page-furniture filter matched class names anywhere in a word, so a wrapper such as `has-sidebar` would have hidden a whole article; only names that start with a furniture word count now.
+  - An AI-written test fixture repeated its paragraphs to look long, which the reader correctly de-duplicates below its minimum length; the fixture now uses distinct paragraphs.
+- **Design changes from Stage 1 introduced here:**
+  - Stage 1 had texts enter the library only through `LibraryService.importDocument` from a `DocumentProvider`. `SourceDiscoveryService` is a second way in, used by the agent and `PrerequisiteService` before they search; the tools and the citation rules are unchanged, so every reading is still a stored passage.
+  - UC08's gap case ("If no appropriate reading exists…") now applies only when nothing is found on the web either.
+- **Human contribution:** Reported the problem and set the goal.
+- **Outcome:** Two code commits and this documentation commit.
