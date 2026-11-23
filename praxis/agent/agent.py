@@ -28,7 +28,20 @@ from praxis.news.exploration import report_passage
 from praxis.llm import LLMClient, LLMError
 from praxis.reader_model.service import ReaderProfileService
 from praxis.research.assessment import ResearchAssessment
-from praxis.research.commands import ResearchCommand, ResearchContext
+from praxis.research.commands import (
+    ResearchCommand,
+    ResearchContext,
+    TraceHistoricalDevelopmentCommand,
+)
+from praxis.research.history import (
+    ContextStatus,
+    HistoricalContext,
+    HistoryPlan,
+    check_items,
+    parse_history,
+    parse_history_plan,
+    suggested_readings,
+)
 from praxis.research.method import DialecticalMaterialistResearchMethod, established_lines
 from praxis.research.plan import ResearchPlan
 from praxis.research.planner import ResearchPlanner
@@ -98,6 +111,24 @@ COMPARISON_NOT_STORED = "The comparison could not be stored, so it cannot be reo
 LOW_COMPARABILITY = (
     "These sources are not sufficiently comparable{reason} A direct "
     "comparison could mislead."
+)
+
+
+# Historical context (F09).
+HISTORY_SOURCES = 15
+EVENT_HISTORY_TOPIC = "the historical background of: {headline}"
+HISTORY_PLAN_UNUSABLE = (
+    "The model's search plan could not be used, so only the topic as typed "
+    "was searched."
+)
+NO_HISTORY_SOURCES = (
+    "No passage in the library bears on the history of this topic, so no "
+    "account was written. Try other words, or import texts on it."
+)
+HISTORY_UNREADABLE = "The model's account could not be read, so only the passages are shown."
+UNCITED_HISTORY = (
+    "The account cites no retrieved passage, so it is not shown; read the "
+    "passages directly."
 )
 
 
@@ -413,6 +444,133 @@ class PoliticalResearchAgent:
             plan=plan,
         )
 
+    # --- F09: historical context ----------------------------------------------
+
+    def explore_history(
+        self,
+        topic: str,
+        allow_broad: bool = False,
+        reports: tuple[NewsArticle, ...] = (),
+    ) -> HistoricalContext:
+        """How ``topic`` developed, organised from library passages (UC09).
+
+        The model plans searches from the topic's origins onward and may
+        judge the topic too broad; unless ``allow_broad``, nothing is then
+        searched and narrower topics are suggested. ``reports`` (news) are
+        the first sources: the present situation whose background is
+        traced. Without a model, or if the account fails, the passages
+        are still returned.
+        """
+        topic = " ".join(topic.split())
+        if not topic:
+            raise AgentError("Name a topic, event or period to trace.")
+        profile = self._profiles.get_profile()
+        usage = _Usage()
+        warnings: list[str] = []
+
+        searches: list[tuple[str, str]] = []
+        if self._llm is not None:
+            plan = self._history_plan(topic, usage)
+            if plan is None:
+                warnings.append(HISTORY_PLAN_UNUSABLE)
+            elif plan.too_broad and not allow_broad:
+                return HistoricalContext(
+                    topic, ContextStatus.TOO_BROAD, narrower=plan.narrower,
+                    tokens_used=usage.tokens,
+                )
+            else:
+                searches = list(plan.searches)
+        searches.append(("the topic as asked", topic))
+
+        session = ResearchSession(topic)
+        context = ResearchContext(session, self._tools, profile=profile, max_sources=HISTORY_SOURCES)
+        steps = []
+        if reports:
+            for report in reports[:MAX_EVENT_REPORTS]:
+                source = context.corpus.add_passage(report, report_passage(report))
+                context.purposes[source.number] = EVENT_PURPOSE
+            steps.append(f"Start from the event's news reports  {_added(len(context.corpus))}")
+        done: set[tuple[type, str]] = set()
+        for label, keywords in searches:
+            command = TraceHistoricalDevelopmentCommand(keywords)
+            if command.key in done:
+                continue
+            done.add(command.key)
+            outcome = command.execute(context)
+            if outcome.succeeded:
+                steps.append(f"{label}: {keywords}  {_added(len(outcome.new_sources))}")
+            else:
+                steps.append(f"{label}: {keywords}  — failed: {outcome.error}")
+                warnings.append(f"A library search failed: {outcome.error}")
+
+        purposes = dict(context.purposes)
+        sources = tuple(context.corpus.sources)
+
+        def result(status: ContextStatus, note: str | None = None, **fields) -> HistoricalContext:
+            return HistoricalContext(
+                topic, status, sources=sources, purposes=purposes, steps=tuple(steps),
+                warnings=tuple(warnings + ([note] if note else [])),
+                tokens_used=usage.tokens, **fields,
+            )
+
+        if not any(purposes.get(s.number) != EVENT_PURPOSE for s in sources):
+            return result(ContextStatus.NO_SOURCES, NO_HISTORY_SOURCES)
+        if self._llm is None:
+            return result(ContextStatus.NOT_ORGANISED, NO_LLM_WARNING)
+
+        prompt = self._prompts.build_history_prompt(topic, context.corpus, purposes, profile)
+        try:
+            response = self._llm.generate(prompt)
+        except LLMError as exc:
+            return result(ContextStatus.NOT_ORGANISED, f"The account could not be generated: {exc}")
+        usage.tokens += response.total_tokens
+
+        parsed = parse_history(response.text)
+        if parsed is None:
+            return result(ContextStatus.NOT_ORGANISED, HISTORY_UNREADABLE)
+        known = {source.number for source in sources}
+        items, dropped = check_items(parsed.items, known)
+        if dropped:
+            warnings.append(
+                f"{dropped} item{'s' if dropped != 1 else ''} of the account cited no retrieved "
+                f"passage and {'were' if dropped != 1 else 'was'} left out."
+            )
+        overview_evidence = tuple(n for n in parsed.overview_evidence if n in known)
+        overview = parsed.overview if overview_evidence else ""
+        if parsed.overview and not overview_evidence:
+            warnings.append("The overview cited no retrieved passage and was left out.")
+        if not items and not overview:
+            return result(ContextStatus.NOT_ORGANISED, UNCITED_HISTORY)
+
+        cited = set(overview_evidence).union(*(item.evidence for item in items))
+        readings = suggested_readings(tuple(
+            s for s in sources if s.number in cited and purposes.get(s.number) != EVENT_PURPOSE
+        ))
+        return result(
+            ContextStatus.EXPLAINED,
+            overview=overview,
+            overview_evidence=overview_evidence,
+            items=tuple(items),
+            gaps=parsed.gaps,
+            readings=readings,
+            personalized=reader_context(profile) is not None,
+        )
+
+    def explore_event_history(self, event: Event) -> HistoricalContext:
+        """F09 from a news event: the background of what its reports
+        describe, with the reports as the first sources."""
+        return self.explore_history(
+            EVENT_HISTORY_TOPIC.format(headline=event.headline), allow_broad=True, reports=event.reports
+        )
+
+    def _history_plan(self, topic: str, usage: _Usage) -> HistoryPlan | None:
+        try:
+            response = self._llm.generate(self._prompts.build_history_plan_prompt(topic))
+        except LLMError:
+            return None
+        usage.tokens += response.total_tokens
+        return parse_history_plan(response.text)
+
     # --- F10: source and framing comparison --------------------------------
 
     def compare_sources(
@@ -681,6 +839,10 @@ class PoliticalResearchAgent:
                     return corpus
                 corpus.add_passage(match.document, match.passage)
         return corpus
+
+
+def _added(count: int) -> str:
+    return f"+{count} source{'s' if count != 1 else ''}"
 
 
 def _paragraph_number(source: Source) -> int | None:
