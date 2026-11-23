@@ -17,7 +17,8 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
-from praxis.documents import Annotation, AnnotationType, Citation
+from praxis.documents import Annotation, AnnotationType
+from praxis.persistence.citations import decode_citation, encode_citation
 from praxis.persistence.database import Database
 
 
@@ -65,7 +66,7 @@ class SQLAnnotationRepository(AnnotationRepository):
                     json.dumps({
                         "locator": annotation.locator,
                         "uncertainties": list(annotation.uncertainties),
-                        "sources": [_encode_citation(c) for c in annotation.sources],
+                        "sources": [encode_citation(c) for c in annotation.sources],
                     }),
                 ),
             )
@@ -109,28 +110,6 @@ def _paragraph_number(locator: str) -> int:
     return int(digits) if digits.isdigit() else 0
 
 
-def _encode_citation(citation: Citation) -> dict[str, str]:
-    return {
-        "id": str(citation.id),
-        "document_id": str(citation.document_id),
-        "document_title": citation.document_title,
-        "author": citation.author,
-        "locator": citation.locator,
-        "quoted_text": citation.quoted_text,
-    }
-
-
-def _decode_citation(data: dict[str, str]) -> Citation:
-    return Citation(
-        id=UUID(data["id"]),
-        document_id=UUID(data["document_id"]),
-        document_title=data["document_title"],
-        author=data["author"],
-        locator=data["locator"],
-        quoted_text=data["quoted_text"],
-    )
-
-
 def _to_annotation(row) -> Annotation:
     extra = json.loads(row["data"])
     return Annotation(
@@ -143,5 +122,5 @@ def _to_annotation(row) -> Annotation:
         created_at=datetime.fromisoformat(row["created_at"]),
         personalized=bool(row["personalized"]),
         uncertainties=tuple(extra["uncertainties"]),
-        sources=tuple(_decode_citation(c) for c in extra["sources"]),
+        sources=tuple(decode_citation(c) for c in extra["sources"]),
     )

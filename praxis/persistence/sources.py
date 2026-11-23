@@ -11,7 +11,8 @@ from typing import Any
 from uuid import UUID
 
 from praxis.agent.corpus import Source
-from praxis.documents import Citation, Passage
+from praxis.documents import Passage
+from praxis.persistence.citations import decode_citation, encode_citation
 
 
 def encode_source(source: Source) -> dict[str, Any]:
@@ -24,14 +25,7 @@ def encode_source(source: Source) -> dict[str, Any]:
             "text": passage.text,
             "locator": passage.locator,
         },
-        "citation": {
-            "id": str(citation.id),
-            "document_id": str(citation.document_id),
-            "document_title": citation.document_title,
-            "author": citation.author,
-            "locator": citation.locator,
-            "quoted_text": citation.quoted_text,
-        },
+        "citation": encode_citation(citation),
     }
 
 
@@ -40,12 +34,6 @@ def decode_source(data: dict[str, Any]) -> Source:
     return Source(
         data["number"],
         Passage(UUID(passage["id"]), UUID(passage["document_id"]), passage["text"], passage["locator"]),
-        Citation(
-            UUID(citation["document_id"]),
-            citation["document_title"],
-            citation["author"],
-            citation["locator"],
-            citation["quoted_text"],
-            UUID(citation["id"]),
-        ),
+        decode_citation(citation),
     )
+
