@@ -111,6 +111,10 @@ python -m praxis analyze "the condition of English factory workers in the 1840s"
 python -m praxis analyze "1848 in Germany" --framework "the state as an instrument of class rule"
 python -m praxis sessions analyze 27004bab        # on a research session's sources
 
+# Leftist traditions (F12): Marxism beside traditions that differ on a topic
+python -m praxis traditions "the abolition of the state after the revolution"
+python -m praxis sessions traditions 27004bab     # on a research session's question
+
 # Source and framing comparison (F10): two to four texts, on one subject
 python -m praxis compare b67c02e1 abdc2552 --on "the peasantry"
 python -m praxis compare 59983f05:20-22 abdc2552:61,66   # named paragraphs
@@ -262,6 +266,17 @@ within Marxist analysis, and the limits where a concept does not fit. An
 analysis with no supported claim is flagged as tentative. The theoretical
 texts it cites are listed to study further.
 
+`traditions` asks the model which leftist traditions hold a materially
+different position on the topic, and which library authors represent each
+(Marxism, including Lenin, comes first). If none differs, none is
+introduced. Each tradition's passages are searched in its representatives'
+own texts first; a tradition with no text of its own is described from
+other authors, and you are told; one with no material at all is left out.
+The model then states each position, the conditions it developed in, where
+the traditions disagree (citing passages from both sides), and the Marxist
+assessment of the others, kept apart from their own positions. Each
+tradition's texts are listed to read in its own words.
+
 Reading with `library read` updates your reading progress, interests and
 inferred knowledge automatically; `profile know` always overrides inference.
 
@@ -289,7 +304,7 @@ API key and no network access.
 | `praxis/llm/` | `LLMClient` interface and the OpenAI adapter |
 | `praxis/persistence/` | SQLite database and repositories |
 | `praxis/research/` | Research session, commands, plan, planner, concrete situation, assessment method, stopping policy, historical context (F09), Marxist analysis (F11) |
-| `praxis/reading/` | `AnnotationService` (F06), `RecommendationService` (F07), `PrerequisiteService` and `LearningPath` (F08) |
+| `praxis/reading/` | `AnnotationService` (F06), `RecommendationService` (F07), `PrerequisiteService` and `LearningPath` (F08), `IdeologicalContextService` (F12) |
 | `praxis/reader_model/` | Reader profile, its service, event bus and updater |
 | `praxis/tools/` | Agent tools, tool manager and tool factory |
 | `praxis/workspace/` | Saved items, workspace and its service |
