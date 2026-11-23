@@ -26,8 +26,6 @@ from praxis.tools import ToolManager
 PASSAGE_SEARCH = "passage_search"
 READINGS_PER_STEP = 2
 SEARCH_LIMIT = 8
-# Catalogue topics of a target text named to the model.
-TARGET_TOPICS_SHOWN = 6
 
 NO_LLM_ERROR = (
     "No language model is configured (set OPENAI_API_KEY), so prerequisites "
@@ -272,9 +270,8 @@ class PrerequisiteService:
 
 
 def describe_text(document: Document) -> str:
-    """How a target text is named to the model."""
+    """How a target text is named to the model. Its catalogue topics are
+    left out: given them, the model listed what the text teaches (for the
+    Brumaire, "historical materialism") as what it assumes."""
     year = f" ({document.publication_date.year})" if document.publication_date else ""
-    topics = ", ".join(document.topics[:TARGET_TOPICS_SHOWN])
-    return f"the text “{document.title}”{year} by {document.author}" + (
-        f" (topics: {topics})" if topics else ""
-    )
+    return f"the text “{document.title}”{year} by {document.author}"

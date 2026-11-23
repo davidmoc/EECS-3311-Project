@@ -219,3 +219,14 @@ def test_interests_and_reading_alone_do_not_make_steps_required(library_database
 
     assert not any(s.required for s in path.steps)
     assert SPARSE_PROFILE_WARNING in path.warnings
+
+
+def test_a_target_text_is_named_without_its_catalogue_topics(library_database):
+    repository = SQLDocumentRepository(library_database)
+    manifesto = next(d for d in repository.list_all() if "Manifesto" in d.title)
+    manifesto.topics = ("class struggle", "communism")
+    llm = ScriptedLLM("prerequisite: Feudalism | concept | essential")
+
+    service(library_database, llm).build_learning_path("", document=manifesto)
+
+    assert "communism" not in llm.prompts[0].user
