@@ -290,8 +290,8 @@ def learning_path(path: LearningPath) -> str:
                                + prerequisite.orientation))
         parts.append("  \n".join(rows))
     if path.steps:
-        parts.append(f"*Learning path {str(path.id)[:8]}: record progress with "
-                     f"`praxis path mark {str(path.id)[:8]} <step> done|known|skip`.*")
+        parts.append(f"*Learning path {str(path.id)[:8]}, {path.settled_count} of {len(path.steps)} "
+                     "steps dealt with. Record progress on the Learning paths page.*")
     parts.append(warnings(path.warnings, path.tokens_used))
     return join(*parts)
 
