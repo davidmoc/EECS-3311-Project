@@ -417,7 +417,8 @@ def _print_traditions(result: TraditionsComparison) -> None:
         if result.disagreements:
             typer.secho("\nWhere they disagree", underline=True)
             for disagreement in result.disagreements:
-                _print_history_line(disagreement.text, disagreement.evidence)
+                sides = f"{disagreement.sides}: " if disagreement.sides else ""
+                _print_history_line(sides + disagreement.text, disagreement.evidence)
         if result.gaps:
             typer.secho("\nGaps: what the passages cannot show", underline=True)
             for gap in result.gaps:

@@ -155,3 +155,17 @@ def test_tradition_prompt_lists_each_author_with_titles():
     assert "- Peter Kropotkin: The Conquest of Bread" in prompt.user
     assert "- Karl Marx: Capital; Grundrisse" in prompt.user
     assert 'named "Marxism"' in prompt.system
+
+
+def test_a_disagreement_headed_with_its_sides_is_split_at_the_bar():
+    # A live run headed disagreements "Leninism vs Anarchism | ...", which
+    # the format does not give them, so the bar was printed.
+    parsed = parse_tradition_comparison(
+        "disagreement: Leninism vs Anarchism | A dictatorship of the proletariat [4, 10].\n"
+        "disagreement: Whether the state can serve the revolution [1, 3]."
+    )
+
+    assert [(d.sides, d.text) for d in parsed.disagreements] == [
+        ("Leninism vs Anarchism", "A dictatorship of the proletariat."),
+        ("", "Whether the state can serve the revolution."),
+    ]

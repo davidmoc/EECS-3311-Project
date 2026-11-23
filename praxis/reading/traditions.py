@@ -130,6 +130,7 @@ class Statement:
 class Disagreement:
     text: str
     evidence: tuple[int, ...]
+    sides: str = ""  # "Leninism vs Anarchism", when the model names them
 
 
 @dataclass(frozen=True)
@@ -258,7 +259,13 @@ def parse_tradition_comparison(text: str) -> ParsedTraditionComparison | None:
         if kind == "gap":
             gaps.append(clean)
         elif kind == "disagreement":
-            disagreements.append(Disagreement(clean, evidence))
+            # The format gives no head, but the model sometimes names the
+            # sides first ("Leninism vs Anarchism | ..."); keep them apart.
+            head, bar, rest = clean.partition("|")
+            if bar and rest.strip():
+                disagreements.append(Disagreement(rest.strip(), evidence, head.strip(" *")))
+            else:
+                disagreements.append(Disagreement(clean, evidence))
         else:
             head, bar, rest = clean.partition("|")
             if not bar or not rest.strip():
@@ -302,7 +309,7 @@ def check_comparison(
         if len(sides) < 2:
             dropped += 1
             continue
-        disagreements.append(Disagreement(disagreement.text, evidence))
+        disagreements.append(Disagreement(disagreement.text, evidence, disagreement.sides))
     return statements, disagreements, dropped
 
 
