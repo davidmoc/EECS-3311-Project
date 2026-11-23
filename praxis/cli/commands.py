@@ -33,6 +33,8 @@ from praxis.reader_model.events import DocumentRead
 from praxis.reading import (
     AnnotationError,
     AnnotationResult,
+    LearningPath,
+    PrerequisiteError,
     ReadingStatus,
     RecommendationError,
     RecommendationResult,
@@ -50,6 +52,7 @@ sessions_app = typer.Typer(help="Reopen and continue earlier research (F03).", n
 annotations_app = typer.Typer(help="List and remove the AI annotations on a text (F06).", no_args_is_help=True)
 news_app = typer.Typer(help="Current news from the configured feeds (F01).", no_args_is_help=True)
 comparisons_app = typer.Typer(help="Reopen earlier source comparisons (F10).", no_args_is_help=True)
+path_app = typer.Typer(help="Learning paths: the background a topic or text assumes (F08).", no_args_is_help=True)
 app.add_typer(library_app, name="library")
 app.add_typer(profile_app, name="profile")
 app.add_typer(workspace_app, name="workspace")
@@ -57,6 +60,7 @@ app.add_typer(sessions_app, name="sessions")
 app.add_typer(annotations_app, name="annotations")
 app.add_typer(comparisons_app, name="comparisons")
 app.add_typer(news_app, name="news")
+app.add_typer(path_app, name="path")
 
 # Tests replace this to run commands against an in-memory database.
 application_factory = build_application
@@ -64,7 +68,7 @@ application_factory = build_application
 # Errors whose message is meant for the user, not a stack trace.
 USER_ERRORS = (
     AgentError, AnnotationError, LibraryError, NewsError, NewsProviderError,
-    RecommendationError, ResearchError, ValueError,
+    PrerequisiteError, RecommendationError, ResearchError, ValueError,
 )
 
 # Longest stretch of a passage printed by `ask`; the rest is one command away.
@@ -885,6 +889,68 @@ def _print_recommendations(result: RecommendationResult, from_interests: bool = 
     elif not result.external:
         typer.echo("No readings to recommend.")
     _print_warnings(result.warnings, result.tokens_used)
+
+
+# --- learning paths (F08) ----------------------------------------------------
+
+READING_EXCERPT_CHARS = 220
+
+
+@path_app.command("build")
+def path_build(
+    target: Annotated[Optional[str], typer.Argument(help="Topic you want to understand, in quotes.")] = None,
+    text: Annotated[Optional[str], typer.Option("--text", help="Build the path for a library text instead (id prefix).")] = None,
+) -> None:
+    """Build an ordered path through what a topic or text assumes you know."""
+    if not target and not text:
+        _fail("Name a topic, or a text with --text.")
+    with session() as application:
+        document = application.library.get_document(text) if text else None
+        path = application.prerequisites.build_learning_path(
+            target or "", application.profiles.get_profile(), document
+        )
+    _print_learning_path(path)
+
+
+def _print_learning_path(path: LearningPath) -> None:
+    how = "prerequisites identified by AI"
+    if path.personalized:
+        how += ", checked against your reader profile"
+    typer.secho(f"Learning path for {path.target}  ({how})", bold=True)
+    if path.already_known:
+        typer.echo(f"Left out, as you said you know: {', '.join(path.already_known)}")
+    if path.no_path_required:
+        typer.echo("\nYou already know what this assumes, so no path is needed. Go straight to it:")
+        if path.target_document_id is not None:
+            typer.echo(f"  → praxis library read {str(path.target_document_id)[:8]}")
+        else:
+            typer.echo(f'  → praxis recommend "{path.target}"')
+        _print_warnings(path.warnings, path.tokens_used)
+        return
+    for number, step in enumerate(path.steps, start=1):
+        prerequisite = step.prerequisite
+        need = "needed" if step.required else "suggested"
+        typer.secho(f"\n{number}. {step.name}  — {prerequisite.kind}, {need}", fg=typer.colors.CYAN)
+        if prerequisite.why:
+            for line in textwrap.wrap(f"Why (AI-generated): {prerequisite.why}", width=84):
+                typer.echo(f"   {line}")
+        if step.note:
+            typer.echo(f"   {step.note}")
+        for citation in step.readings:
+            typer.echo(f"   Read: {citation.format()}")
+            excerpt = citation.quoted_text
+            if len(excerpt) > READING_EXCERPT_CHARS:
+                excerpt = excerpt[:READING_EXCERPT_CHARS].rstrip() + " […]"
+            for line in textwrap.wrap(excerpt, width=80):
+                typer.echo(f"         {line}")
+            paragraph = citation.locator.lstrip("¶")
+            typer.echo(f"         → praxis library read {str(citation.document_id)[:8]} --start {paragraph}")
+        if step.is_gap and prerequisite.orientation:
+            label = "Orientation (AI-generated; nothing in the library on this): "
+            for line in textwrap.wrap(label + prerequisite.orientation, width=84):
+                typer.echo(f"   {line}")
+    typer.echo('\nAlready understand a step?  praxis profile know "<name>" introductory')
+    _print_warnings(path.warnings, path.tokens_used)
 
 
 ANNOTATION_TYPES = ", ".join(t.value.replace("_", "-") for t in AnnotationType)

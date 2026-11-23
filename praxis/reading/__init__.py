@@ -1,10 +1,18 @@
-"""Reading texts: annotations (F06) and reading recommendations (F07)."""
+"""Reading texts: annotations (F06), recommendations (F07) and learning paths (F08)."""
 
 from praxis.reading.annotations import (
     AnnotationError,
     AnnotationResult,
     AnnotationService,
     surrounding_passages,
+)
+from praxis.reading.prerequisites import (
+    LearningPath,
+    LearningStep,
+    Prerequisite,
+    PrerequisiteError,
+    PrerequisiteService,
+    StepStatus,
 )
 from praxis.reading.recommendations import (
     ExternalSuggestion,
@@ -20,6 +28,12 @@ __all__ = [
     "AnnotationResult",
     "AnnotationService",
     "ExternalSuggestion",
+    "LearningPath",
+    "LearningStep",
+    "Prerequisite",
+    "PrerequisiteError",
+    "PrerequisiteService",
+    "StepStatus",
     "ReadingStatus",
     "Recommendation",
     "RecommendationError",
