@@ -41,6 +41,7 @@ from praxis.reading import (
     RecommendationResult,
 )
 from praxis.research import ResearchBudget, ResearchError
+from praxis.research.analysis import AnalysisItemKind, AnalysisStatus, MaterialistAnalysis
 from praxis.research.history import ContextStatus, HistoricalContext, HistoryItemKind
 from praxis.research.result import ResearchResult
 from praxis.research.situation import ConcreteSituation
@@ -279,6 +280,72 @@ def _print_history_line(text: str, evidence: tuple[int, ...]) -> None:
         typer.echo(("  " if n else "") + part)
 
 
+# --- Marxist theoretical analysis (F11) ---------------------------------------
+
+
+@app.command("analyze")
+def analyze(
+    issue: Annotated[str, typer.Argument(help="Issue, event or question, in quotes.")],
+    framework: Annotated[Optional[str], typer.Option("--framework", "-f", help="A theoretical framework to apply, in quotes.")] = None,
+) -> None:
+    """Analyse an issue with Marxist theory: evidence, theory, and how they connect."""
+    with session() as application:
+        analysis = application.agent.analyze(issue, framework)
+    _print_analysis(analysis)
+
+
+_CLAIM_LABELS = {"supported": "supported by several passages", "tentative": "tentative"}
+
+
+def _print_analysis(analysis: MaterialistAnalysis) -> None:
+    heading = f"Marxist analysis: {analysis.issue}"
+    if analysis.research_session:
+        heading += f"  (on research session {analysis.research_session})"
+    typer.secho(heading, bold=True)
+    if analysis.framework:
+        typer.echo(f"Framework requested: {analysis.framework}")
+    if analysis.concepts:
+        typer.echo("Concepts applied (AI-chosen): " + "; ".join(c.name for c in analysis.concepts))
+    typer.echo()
+    _print_sources(analysis.sources, analysis.cited, analysis.purposes)
+
+    if analysis.status is AnalysisStatus.ANALYSED:
+        label = "\nAnalysis (AI-generated interpretation"
+        label += ", adapted to your reader profile)" if analysis.personalized else ")"
+        typer.secho(label, bold=True)
+        sections = (
+            (AnalysisItemKind.CONDITION, "What the evidence shows"),
+            (AnalysisItemKind.APPLICATION, "Theory applied to the evidence"),
+            (AnalysisItemKind.CLAIM, "Interpretations"),
+            (AnalysisItemKind.ALTERNATIVE, "Other readings within Marxist analysis"),
+        )
+        for kind, title in sections:
+            items = analysis.of_kind(kind)
+            if not items:
+                continue
+            typer.secho(f"\n{title}", underline=True)
+            for item in items:
+                prefix = ""
+                if kind is AnalysisItemKind.CLAIM:
+                    prefix = f"({_CLAIM_LABELS[item.label]}) "
+                elif item.label:
+                    prefix = f"{item.label}: "
+                _print_history_line(prefix + item.text, item.evidence)
+        if analysis.limits:
+            typer.secho("\nLimits: where the theory may not fit or the evidence is thin", underline=True)
+            for limit in analysis.limits:
+                _print_history_line(limit, ())
+        if analysis.readings:
+            typer.secho("\nTheory to study further", bold=True)
+            for reading in analysis.readings:
+                times = f"cited {reading.cited} time{'s' if reading.cited != 1 else ''}"
+                typer.echo(f"  {reading.title} — {reading.author} ({times})")
+                typer.echo(
+                    f"    → praxis library read {str(reading.document_id)[:8]} --start {reading.start.lstrip('¶')}"
+                )
+    _print_warnings(analysis.warnings, analysis.tokens_used)
+
+
 # --- research (F03) ----------------------------------------------------------
 
 
@@ -441,6 +508,18 @@ def sessions_compare(
     _print_comparison(comparison)
     _print_comparison_hint(comparison)
     _print_saved(saved, save)
+
+
+@sessions_app.command("analyze")
+def sessions_analyze(
+    session_id: Annotated[str, typer.Argument(help="Session id or prefix.")],
+    framework: Annotated[Optional[str], typer.Option("--framework", "-f", help="A theoretical framework to apply, in quotes.")] = None,
+) -> None:
+    """Analyse a research session's evidence with Marxist theory (F11)."""
+    with session() as application:
+        agent = application.agent
+        analysis = agent.analyze_research(agent.find_research(session_id), framework)
+    _print_analysis(analysis)
 
 
 @sessions_app.command("continue")
