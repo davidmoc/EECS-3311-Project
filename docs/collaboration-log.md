@@ -457,12 +457,17 @@ platform.openai.com.
 - **Human contribution:** None on this slice yet; the code has not been reviewed.
 - **Outcome:** Four code commits and this documentation commit.
 
-### 2026-11-22 — Graphical interface, second slice (in progress): research and past research
+### 2026-11-22 — Graphical interface, second slice: research, past research and learning paths
 
 - **Task:** Bring the agent's requests into the GUI.
-- **Input/Instruction:** Fourth of the five slices requested.
-- **AI contribution:** Added `praxis/gui/results.py` (each feature's result as Markdown, following the CLI's labels), `research.py` (`ResearchController`, `ResearchView`: ask F04, research F03, history F09, analysis F11, traditions F12, readings F07, learning paths F08, with per-request detail and "general" options from F14), `sessions.py` (`SessionsController`, `SessionsView`: reopen stored research, continue it with a focus, and run analysis, text comparison or traditions on it), and `widgets.py` (shared `lock_while_busy` and `result_browser`). Passage links in results open the text at that paragraph on the library page. 780 automated tests.
-- **Problems met:** An AI-written GUI test switched the model off by setting a private attribute; it was replaced by a test of a real follow-up (comparing a session's texts when the model's reply is unreadable).
-- **Not yet done:** No live run of the GUI pages against the model; marking learning-path steps in the GUI; README section for these pages.
+- **Input/Instruction:** Fourth of the five slices requested. The session hit its usage limit partway through; the slice was finished after it reset ("Continue the task you were working on").
+- **AI contribution:** Added `praxis/gui/results.py` (each feature's result as Markdown, following the CLI's labels), `research.py` (`ResearchController`, `ResearchView`: ask F04, research F03, history F09, analysis F11, traditions F12, readings F07, learning paths F08, with per-request detail and "general" options from F14), `sessions.py` (`SessionsController`, `SessionsView`: reopen stored research, continue it with a focus, and run analysis, text comparison or traditions on it), `paths.py` (`PathsController`, `PathsView`: stored learning paths and marking steps) and `widgets.py` (shared `lock_while_busy` and `result_browser`). Passage links in results open the text at that paragraph on the library page. 784 automated tests. One live run of the research page's "Ask a question" against `gpt-5-mini`, on a real worker thread, offscreen (23 s): the passages came first and the explanation was labelled AI-generated and adapted to the reader profile. The phrase it quoted, "orders it to raise itself above the danger of self government", is in the cited ¶121 of the *Brumaire*. The page was rendered to an image and looked at.
+- **Problems met:**
+  - An AI-written GUI test switched the model off by setting a private attribute. It was replaced by a test of a real follow-up: comparing a session's texts when the model's reply is unreadable.
+  - Passage-link handling was first written twice (research and past research pages), and the past research page's buttons were re-enabled after a request even with no session chosen. Both were corrected before commit: the links moved to `widgets.result_browser`, and the buttons now follow the selection.
+  - Italics marked with underscores in the Gutenberg texts (`_Socialist_`) are shown with their underscores, because passage text is escaped so that it is never read as formatting. Not changed.
+- **Design changes from Stage 1 introduced here:**
+  - Stage 1's `ResearchView`/`ResearchController` handle research only. Here the research page is where the reader makes every request to the agent and the reading services, chosen from a list, because each takes the same input (a topic or question) and shows the same kind of result (passages, then labelled AI output).
+  - Marking a learning-path step in the GUI publishes `PrerequisiteMarkedKnown`, as `path mark` does, so the GUI and CLI update the reader model the same way (Observer).
 - **Human contribution:** None on this slice yet; the code has not been reviewed.
-- **Outcome:** Two code commits and this documentation commit so far.
+- **Outcome:** Three code commits, this documentation commit and one earlier interim log commit.

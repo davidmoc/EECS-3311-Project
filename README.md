@@ -56,6 +56,17 @@ The window has a page per area, chosen on the left:
   one ten paragraphs at a time (progress is recorded in your profile), and
   ask for an AI annotation of a paragraph. Annotations are kept and shown
   under their paragraph, set apart from the author's words.
+- **Research** (F03, F04, F07–F09, F11, F12, F14): choose what to do (ask a
+  question, research in several steps, trace the history, Marxist
+  analysis, compare leftist traditions, recommend readings, build a
+  learning path), type the topic, and optionally ask for more or less
+  detail or a general answer for this request only. Results show their
+  passages first; each has a link that opens the text at that paragraph.
+- **Past research** (F03, F10–F12): every research run, to reopen as it was
+  left, continue with a new focus, or follow up with an analysis, a
+  comparison of the texts behind it, or a comparison of traditions.
+- **Learning paths** (F08): stored paths; mark a step done, already known
+  or skipped. Done and known steps are added to your reader model.
 - **Profile** (F13, F14): what the system believes you know and where each
   belief came from, your interests and reading; correct or remove any of
   them, and set the explanation detail and personalization.
