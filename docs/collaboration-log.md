@@ -323,7 +323,7 @@ platform.openai.com.
 - **Problems met:**
   - Steps were marked "needed" for a reader with no recorded knowledge: the check used `ReaderProfile.is_sparse`, which also counts interests and reading progress. Steps are now required only when knowledge areas exist. Fixed in its own commit (`1c3fd6a`), with a regression test confirmed to fail before the fix.
   - Given the target text's catalogue topics, the model listed what the text teaches as what it assumes. The text is now named by title, year and author only (`95190e4`). Regression test confirmed to fail before the fix.
-  - The same paragraph was offered for two steps; a passage is now offered by one step only. Regression test confirmed to fail before the fix.
+  - The same paragraph was offered for two steps; a passage is now offered by one step only (`bbaff34`). Regression test confirmed to fail before the fix.
   - Readings are found by keyword search, and the library holds five books, so several are weak: ¶9 of *Revolution and Counter-Revolution* (a preface naming the *Brumaire*) for the 1799 coup, ¶93 (German parties) for the French factions, and two unrelated paragraphs for Bonapartism. Not changed. The path shows the excerpt beside each reading, so the reader can judge it.
   - Two AI-written CLI tests assumed "negation" and "Hegelian dialectic" appear in no bundled text; "Hegelian" and "dialectic" do. The test uses the Physiocrats, which no bundled text mentions.
 - **Design changes from Stage 1 introduced here:**
@@ -333,4 +333,4 @@ platform.openai.com.
   - SD05's "user already knows prerequisites" branch is `LearningPath.no_path_required`: the command says no path is needed and points to the target text, or to `recommend` for a topic.
   - `LearningPath` has an id, a creation time and a status per step, ready to be stored; storing paths and recording progress (UC08 steps 7–8) is the next slice. Until then the command points to `profile know` for steps the reader already understands.
 - **Human contribution:** None on this slice yet; the code has not been reviewed.
-- **Outcome:** Six code commits and this documentation commit.
+- **Outcome:** Five code commits and this documentation commit.
