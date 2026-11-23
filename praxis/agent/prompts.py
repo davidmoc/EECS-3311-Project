@@ -363,8 +363,10 @@ Rules:
 Leave out anything the passages do not support.
 {CITATION_NUMBER_RULE}
 - Stages and turning points are facts the passages state: dates, events, \
-who did what. Give them in chronological order. Write the date as the \
-passages give it; if they give none, write "undated".
+who did what. Write them as one sequence in chronological order, mixing \
+the two kinds, and never list one event as both: a turning point is a \
+stage that changed the course. Write the date as the passages give it; \
+if they give none, write "undated".
 - An explanation of why something happened that historians or the \
 authors dispute, or that is the author's own judgement, is an \
 interpretation, never a stage or turning point. Say whose view it is.

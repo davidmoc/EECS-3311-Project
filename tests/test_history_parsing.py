@@ -112,3 +112,25 @@ def test_prompts_carry_the_topic_and_grouped_passages():
     assert "Retrieved for historical development" in prompt.user
     assert "[1] Engels, “Revolution”, ¶1" in prompt.user
     assert "turning point: <when>" in prompt.system
+
+
+def test_account_rules_ask_for_one_chronological_sequence():
+    # A live account listed every stage, then every turning point, and gave
+    # some events twice, once as each.
+    system = PromptBuilder().build_history_prompt("1848", _one_passage_corpus(), {1: "history"}).system
+
+    assert "one sequence in chronological order, mixing the two kinds" in system
+    assert "never list one event as both" in system
+
+
+def test_chronology_keeps_the_model_order_across_kinds():
+    parsed = parse_history("stage: March 1848 | Risings [1]\nturning point: October 1848 | Vienna falls [1]\nstage: 1849 | Reaction [1]")
+
+    assert [i.when for i in parsed.items if i.kind.is_dated] == ["March 1848", "October 1848", "1849"]
+
+
+def _one_passage_corpus():
+    book = Book(title="Revolution", author="Engels", text="In 1848 the revolution broke out in Paris.")
+    corpus = ResearchCorpus()
+    corpus.add_passage(book, book.paragraph(1))
+    return corpus
