@@ -12,9 +12,9 @@ from praxis.agent.corpus import ResearchCorpus, Source
 from praxis.documents import AnnotationType, Document, Passage
 from praxis.llm import Prompt
 from praxis.reader_model import ExplanationDepth, ReaderProfile
+from praxis.reader_model.personalization import PersonalizationService
 
 MAX_SEARCH_TERMS = 8
-MAX_KNOWLEDGE_LINES = 12
 MAX_PLAN_STEPS = 4
 PLAN_STEP_KINDS = ("evidence", "theory", "history")
 # Compared sources are called Source A, Source B, ...
@@ -618,7 +618,7 @@ class PromptBuilder:
         if corpus.is_empty:
             raise ValueError("A research prompt needs at least one source.")
 
-        depth = profile.explanation_depth if profile else ExplanationDepth.STANDARD
+        depth = PersonalizationService.determine_explanation_depth(profile)
         system = (
             f"{SOURCE_FIRST_RULES}\n\n{RESEARCH_SYNTHESIS_FORMAT}\n\n"
             f"{_DEPTH_GUIDANCE[depth]}"
@@ -717,7 +717,7 @@ class PromptBuilder:
             f"{source.label} {source.citation.format()}\n{source.citation.quoted_text}"
             for source in corpus.sources
         )
-        depth = profile.explanation_depth if profile else ExplanationDepth.STANDARD
+        depth = PersonalizationService.determine_explanation_depth(profile)
         system = f"{SOURCE_FIRST_RULES}\n\n{_DEPTH_GUIDANCE[depth]}"
         context = reader_context(profile)
         if context:
@@ -744,7 +744,7 @@ class PromptBuilder:
         include ``passage`` itself (it is then marked in place). ``corpus``
         holds other library passages to draw on, numbered for citation.
         """
-        depth = profile.explanation_depth if profile else ExplanationDepth.STANDARD
+        depth = PersonalizationService.determine_explanation_depth(profile)
         system = (
             f"{ANNOTATION_RULES}\n\nTask: {_ANNOTATION_TASKS[annotation_type.value]}\n\n"
             f"{_DEPTH_GUIDANCE[depth]}"
@@ -1002,35 +1002,8 @@ def _grouped_passages(corpus: ResearchCorpus, purposes: dict[int, str]) -> str:
     )
 
 
-def reader_context(profile: ReaderProfile | None) -> str | None:
-    """What the prompt may say about the reader, or None to stay general.
-
-    Nothing is said when the reader turned personalization off or when too
-    little is known to adapt honestly (F14). Inferred knowledge is worded as
-    a guess, because the reader never confirmed it (F13).
-    """
-    if profile is None or not profile.personalization_enabled or profile.is_sparse:
-        return None
-
-    lines = []
-    if profile.background:
-        lines.append(f"- In their own words: {profile.background}")
-    areas = sorted(
-        profile.knowledge.areas.values(), key=lambda a: (-a.level, a.topic)
-    )[:MAX_KNOWLEDGE_LINES]
-    for area in areas:
-        level = area.level.name.lower()
-        if area.is_inferred:
-            lines.append(f"- Probably at {level} level in {area.topic} (inferred from reading)")
-        else:
-            lines.append(f"- Says they are at {level} level in {area.topic}")
-    interests = profile.interests.top(5)
-    if interests:
-        lines.append(f"- Interested in: {', '.join(interests)}")
-    if not lines:
-        return None
-    lines.append(
-        "Pitch the explanation to this reader: skip what they already know, "
-        "define terms they are unlikely to know."
-    )
-    return "\n".join(lines)
+def reader_context(profile: ReaderProfile | None, topic: str | None = None) -> str | None:
+    """What the prompt may say about the reader, or None to stay general
+    (F14): see ``PersonalizationService.personalize_prompt``. With
+    ``topic``, what the reader knows of it comes first."""
+    return PersonalizationService.personalize_prompt(profile, topic)
