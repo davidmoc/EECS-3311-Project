@@ -848,7 +848,7 @@ class PromptBuilder:
         corpus: ResearchCorpus,
         purposes: dict[int, str],
         framework: str | None = None,
-        established: list[str] = (),
+        established: list[str] | None = None,
         profile: ReaderProfile | None = None,
     ) -> Prompt:
         """A prompt asking for the analysis. ``established`` are findings

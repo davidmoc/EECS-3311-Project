@@ -7,6 +7,7 @@ prompt construction, the LLM and citation checking stay behind it.
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -28,9 +29,21 @@ from praxis.news.exploration import report_passage
 from praxis.llm import LLMClient, LLMError
 from praxis.reader_model.service import ReaderProfileService
 from praxis.research.assessment import ResearchAssessment
+from praxis.research.analysis import (
+    THEORY_PURPOSE,
+    AnalysisStatus,
+    Concept,
+    MaterialistAnalysis,
+    check_analysis,
+    parse_analysis,
+    parse_concepts,
+)
 from praxis.research.commands import (
+    PASSAGES_PER_STEP,
     ResearchCommand,
     ResearchContext,
+    RetrieveEvidenceCommand,
+    RetrieveTheoryCommand,
     TraceHistoricalDevelopmentCommand,
 )
 from praxis.research.history import (
@@ -129,6 +142,31 @@ HISTORY_UNREADABLE = "The model's account could not be read, so only the passage
 UNCITED_HISTORY = (
     "The account cites no retrieved passage, so it is not shown; read the "
     "passages directly."
+)
+
+
+# Marxist theoretical analysis (F11).
+MAX_ANALYSIS_CONCEPTS = 4
+NO_ANALYSIS_SOURCES = (
+    "No passage in the library bears on this issue, so no analysis was "
+    "written. Try other words, or import texts on it."
+)
+CONCEPTS_UNUSABLE = (
+    "The model did not name usable concepts, so theory was searched for "
+    "the {what} as typed."
+)
+NO_THEORY_FOUND = (
+    "No theoretical passage in the library was found for these concepts, "
+    "so no analysis was written; the evidence is shown."
+)
+ANALYSIS_UNREADABLE = "The model's analysis could not be read, so only the passages are shown."
+UNCITED_ANALYSIS = (
+    "The analysis cites no retrieved passage, so it is not shown; read the "
+    "passages directly."
+)
+TENTATIVE_ANALYSIS = (
+    "No claim in this analysis is borne out by several evidence passages, "
+    "so treat it as tentative."
 )
 
 
@@ -572,6 +610,140 @@ class PoliticalResearchAgent:
             return None
         usage.tokens += response.total_tokens
         return parse_history_plan(response.text)
+
+    # --- F11: Marxist theoretical analysis -----------------------------------
+
+    def analyze(self, issue: str, framework: str | None = None) -> MaterialistAnalysis:
+        """A Marxist analysis of ``issue`` from library passages (UC11).
+
+        Evidence is searched for first; the model then names the concepts
+        the evidence gives reason to apply (``framework`` first, if the
+        reader asked for one), theory is retrieved for each, and the model
+        connects the two. Without a model, the evidence is still returned.
+        """
+        issue = " ".join(issue.split())
+        if not issue:
+            raise AgentError("Name an issue, event or question to analyse.")
+        profile = self._profiles.get_profile()
+        usage = _Usage()
+        context = ResearchContext(
+            ResearchSession(issue), self._tools, profile=profile, library_only=True
+        )
+        terms = self._search_terms(issue, usage)
+        for query in ([" ".join(terms)] if terms else []) + [issue]:
+            RetrieveEvidenceCommand(query).execute(context)
+        return self._analyse(issue, framework, context, usage)
+
+    def analyze_research(
+        self, session_id: UUID, framework: str | None = None
+    ) -> MaterialistAnalysis:
+        """UC11 "reached as part of a broader research session": the
+        session's sources are the evidence, and its findings are offered to
+        the model; only theory is searched for."""
+        research = self.get_research(session_id)
+        corpus = _restore_corpus(research)
+        context = ResearchContext(
+            ResearchSession(research.objective), self._tools, corpus,
+            self._profiles.get_profile(),
+            max_sources=len(corpus) + MAX_ANALYSIS_CONCEPTS * PASSAGES_PER_STEP,
+            purposes=dict(research.purposes), library_only=True,
+        )
+        established = established_lines(research.situation) if research.situation else []
+        return self._analyse(
+            research.objective, framework, context, _Usage(), established,
+            research_session=str(research.session.id)[:8],
+        )
+
+    def _analyse(
+        self,
+        issue: str,
+        framework: str | None,
+        context: ResearchContext,
+        usage: _Usage,
+        established: list[str] | None = None,
+        research_session: str | None = None,
+    ) -> MaterialistAnalysis:
+        framework = " ".join((framework or "").split()) or None
+        warnings: list[str] = []
+        evidence = [s for s in context.corpus.sources if context.purposes.get(s.number) != THEORY_PURPOSE]
+        concepts: list[Concept] = []
+
+        def result(status: AnalysisStatus, note: str | None = None, **fields) -> MaterialistAnalysis:
+            return MaterialistAnalysis(
+                issue, status, framework, tuple(concepts),
+                sources=tuple(context.corpus.sources), purposes=dict(context.purposes),
+                research_session=research_session,
+                warnings=tuple(warnings + ([note] if note else [])),
+                tokens_used=usage.tokens, **fields,
+            )
+
+        if not evidence:
+            return result(AnalysisStatus.NO_SOURCES, NO_ANALYSIS_SOURCES)
+        if self._llm is None:
+            return result(AnalysisStatus.NOT_ANALYSED, NO_LLM_WARNING)
+
+        try:
+            response = self._llm.generate(self._prompts.build_concept_prompt(issue, evidence, framework))
+            usage.tokens += response.total_tokens
+            concepts = parse_concepts(response.text)
+        except LLMError:
+            concepts = []
+        if not concepts:
+            what = "framework" if framework else "issue"
+            warnings.append(CONCEPTS_UNUSABLE.format(what=what))
+            concepts = [Concept(framework or issue)]
+
+        theory_found = False
+        for concept in concepts[:MAX_ANALYSIS_CONCEPTS]:
+            outcome = RetrieveTheoryCommand(f"{concept.name} {concept.keywords}").execute(context)
+            if not outcome.succeeded:
+                warnings.append(f"The theory search for {concept.name} failed: {outcome.error}")
+            theory_found = theory_found or bool(outcome.new_sources)
+        theory_found = theory_found or any(
+            context.purposes.get(s.number) == THEORY_PURPOSE for s in context.corpus.sources
+        )
+        if not theory_found:
+            return result(AnalysisStatus.NO_THEORY, NO_THEORY_FOUND)
+
+        profile = context.profile
+        prompt = self._prompts.build_analysis_prompt(
+            issue, context.corpus, context.purposes, framework, established or [], profile
+        )
+        try:
+            response = self._llm.generate(prompt)
+        except LLMError as exc:
+            return result(AnalysisStatus.NOT_ANALYSED, f"The analysis could not be generated: {exc}")
+        usage.tokens += response.total_tokens
+
+        parsed = parse_analysis(response.text)
+        if parsed is None:
+            return result(AnalysisStatus.NOT_ANALYSED, ANALYSIS_UNREADABLE)
+        known = {source.number for source in context.corpus.sources}
+        items, dropped = check_analysis(parsed.items, context.purposes, known)
+        if dropped:
+            warnings.append(
+                f"{dropped} part{'s' if dropped != 1 else ''} of the analysis did not cite the "
+                f"passages {'they' if dropped != 1 else 'it'} needed "
+                f"(an application needs theory and evidence) and {'were' if dropped != 1 else 'was'} left out."
+            )
+        if not items:
+            return result(AnalysisStatus.NOT_ANALYSED, UNCITED_ANALYSIS)
+
+        cited = {n for item in items for n in item.evidence}
+        readings = suggested_readings(tuple(
+            s for s in context.corpus.sources
+            if s.number in cited and context.purposes.get(s.number) == THEORY_PURPOSE
+        ))
+        analysis = result(
+            AnalysisStatus.ANALYSED,
+            items=tuple(items),
+            limits=parsed.limits,
+            readings=readings,
+            personalized=reader_context(profile) is not None,
+        )
+        if analysis.is_tentative:
+            analysis = replace(analysis, warnings=(TENTATIVE_ANALYSIS, *analysis.warnings))
+        return analysis
 
     # --- F10: source and framing comparison --------------------------------
 
