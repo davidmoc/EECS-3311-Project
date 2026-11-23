@@ -18,6 +18,7 @@ from praxis.gui.profile import ProfileController, ProfileView
 from praxis.gui.research import ResearchController, ResearchView
 from praxis.gui.sessions import SessionsController, SessionsView
 from praxis.gui.tasks import TaskRunner, ThreadTaskRunner
+from praxis.gui.workspace import Resume, WorkspaceController, WorkspaceView
 from praxis.persistence import Database
 
 
@@ -28,6 +29,7 @@ def build_window(application: Application, runner: TaskRunner) -> MainWindow:
     window.add_page("Library", LibraryView(
         LibraryController(application), ReadingController(application), runner
     ))
+
     def open_reading(document_id: str, paragraph: int) -> None:
         window.show_page("Library").open_text(document_id, paragraph)
 
@@ -36,6 +38,18 @@ def build_window(application: Application, runner: TaskRunner) -> MainWindow:
     window.add_page("Past research", SessionsView(SessionsController(application), runner, open_reading))
     window.add_page("Compare", CompareView(CompareController(application), runner, open_reading))
     window.add_page("Learning paths", PathsView(PathsController(application), runner, open_reading))
+    def go_to(resume: Resume) -> None:
+        """Continue from a saved item on the page it came from."""
+        if resume.kind == "text":
+            window.show_page("Library").open_text(str(resume.target), resume.paragraph)
+        elif resume.kind == "research":
+            window.show_page("Past research").open_session(resume.target)
+        elif resume.kind == "comparison":
+            window.show_page("Compare").open_comparison(resume.target)
+        elif resume.kind == "event":
+            window.show_page("News").open_event(resume.target)
+
+    window.add_page("Workspace", WorkspaceView(WorkspaceController(application), runner, go_to))
     window.add_page("Profile", ProfileView(ProfileController(application), runner))
     return window
 

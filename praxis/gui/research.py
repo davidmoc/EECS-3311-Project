@@ -25,12 +25,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from praxis.agent import AgentResponse
 from praxis.app import Application
 from praxis.gui import results
 from praxis.gui.tasks import TaskRunner, describe_error
 from praxis.gui.widgets import OpenReading, result_browser
 from praxis.reader_model import ExplanationDepth, ReaderProfile
 from praxis.reader_model.personalization import RequestPreferences
+from praxis.research.result import ResearchResult
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,15 @@ class ResearchController:
         service = self._application.recommendations
         return service.recommend_readings(topic, profile) if topic.strip() else service.recommend_next(profile)
 
+    def save(self, result: Any):
+        """Answers and research results can be kept (F15)."""
+        workspace = self._application.workspace
+        if isinstance(result, AgentResponse):
+            return workspace.save_answer(result)
+        if isinstance(result, ResearchResult):
+            return workspace.save_research(result)
+        raise ValueError("Only answers and research results can be saved from here.")
+
     def path(self, topic: str, preferences: RequestPreferences | None = None):
         return self._application.prerequisites.build_learning_path(topic, self._profile(preferences))
 
@@ -126,6 +137,10 @@ class ResearchView(QWidget):
         top.addWidget(self.mode_box)
         top.addWidget(self.input, stretch=1)
         top.addWidget(self.run_button)
+        self.save_button = QPushButton("Save to workspace")
+        self.save_button.clicked.connect(self.save)
+        self.save_button.setEnabled(False)
+        top.addWidget(self.save_button)
 
         self.framework = QLineEdit()
         self.framework.setPlaceholderText("Framework to apply (optional), e.g. the state as an instrument of class rule")
@@ -151,6 +166,7 @@ class ResearchView(QWidget):
         layout.addWidget(self.message)
 
         runner.busy_changed.connect(lambda busy: self.run_button.setEnabled(not busy))
+        runner.busy_changed.connect(lambda busy: self.save_button.setEnabled(not busy and self._can_save()))
         self._mode_changed()
 
     @property
@@ -192,6 +208,7 @@ class ResearchView(QWidget):
             self.result = result
             self.output.setMarkdown(RENDERERS[mode.key](result))
             self.message.clear()
+            self.save_button.setEnabled(self._can_save())
 
         def failed(exc: Exception) -> None:
             self.output.clear()
@@ -199,3 +216,18 @@ class ResearchView(QWidget):
 
         self.message.setText("Working… model requests can take a minute.")
         self._runner.run(mode.label, lambda: method(text, preferences, **extra), done, failed)
+
+    def _can_save(self) -> bool:
+        if isinstance(self.result, AgentResponse):
+            return bool(self.result.sources)
+        return isinstance(self.result, ResearchResult)
+
+    def save(self) -> None:
+        if not self._can_save():
+            return
+        try:
+            saved = self._controller.save(self.result)
+        except Exception as exc:
+            self.message.setText(f"Error: {describe_error(exc)}")
+            return
+        self.message.setText(f"Saved to your workspace: {saved.title}")

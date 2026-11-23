@@ -87,6 +87,12 @@ class ReadingController:
             by_passage.setdefault(annotation.passage_id, []).append(annotation)
         return ReaderPage(document, shown, start, len(passages), by_passage)
 
+    def save_text(self, document: Document):
+        return self._application.workspace.save_document(document)
+
+    def save_paragraph(self, document: Document, paragraph: int):
+        return self._application.workspace.save_passage(document, document.paragraph(paragraph))
+
     def annotate(
         self,
         document: Document,
@@ -152,7 +158,13 @@ class LibraryView(QWidget):
         annotate_row.addWidget(self.paragraph_box)
         annotate_row.addWidget(self.type_box)
         annotate_row.addWidget(self.annotate_button)
+        self.save_paragraph_button = QPushButton("Save paragraph")
+        self.save_paragraph_button.clicked.connect(self.save_paragraph)
+        self.save_text_button = QPushButton("Save text")
+        self.save_text_button.clicked.connect(self.save_text)
         annotate_row.addStretch()
+        annotate_row.addWidget(self.save_paragraph_button)
+        annotate_row.addWidget(self.save_text_button)
         self.annotation = QTextBrowser()
         self.annotation.setMaximumHeight(260)
         self.message = QLabel()
@@ -177,6 +189,7 @@ class LibraryView(QWidget):
         lock_while_busy(
             runner, self.search_box, self.topic_box, self.text_list,
             self.previous_button, self.next_button, self.annotate_button,
+            self.save_paragraph_button, self.save_text_button,
         )
         self.refresh()
         self._update_controls()
@@ -244,6 +257,27 @@ class LibraryView(QWidget):
         self.previous_button.setEnabled(page is not None and page.start > 1)
         self.next_button.setEnabled(page is not None and page.end < page.total)
         self.annotate_button.setEnabled(page is not None and bool(page.passages))
+        self.save_paragraph_button.setEnabled(page is not None and bool(page.passages))
+        self.save_text_button.setEnabled(page is not None)
+
+    # --- saving (F15) -----------------------------------------------------------
+
+    def save_text(self) -> None:
+        if self.page is not None:
+            self._save(lambda: self._reading.save_text(self.page.document))
+
+    def save_paragraph(self) -> None:
+        if self.page is not None:
+            paragraph = self.paragraph_box.value()
+            self._save(lambda: self._reading.save_paragraph(self.page.document, paragraph))
+
+    def _save(self, action) -> None:
+        try:
+            saved = action()
+        except Exception as exc:
+            self.message.setText(f"Error: {describe_error(exc)}")
+            return
+        self.message.setText(f"Saved to your workspace: {saved.title}")
 
     # --- annotating (F06) ------------------------------------------------------
 
