@@ -321,6 +321,58 @@ one of them, use exactly that name for it.
 Where an interpretation is disputed, say so.
 - No other text."""
 
+MAX_HISTORY_SEARCHES = 4
+
+HISTORY_PLAN_RULES = f"""\
+You plan the search for historical context in Praxis, a platform for \
+studying politics, history and Marxist theory from primary sources. The \
+library holds political theory and history texts, mostly 19th and early \
+20th century translations, searched by keyword. The reader wants to \
+understand how a situation developed over time.
+
+Reply only with lines in these forms:
+scope: <focused|too broad> | <if too broad: two or three narrower topics, separated by ;>
+search: <the period, stage or aspect to look for> | <keywords>
+
+Rules:
+- Write "too broad" only when the topic spans so much (for example a \
+whole century, or "the history of capitalism") that a short account from \
+a few passages would mislead. Then write no search lines.
+- Otherwise write 2 to {MAX_HISTORY_SEARCHES} search lines, from the \
+origins to the latest developments, in the vocabulary those texts would \
+use. Leave out author names.
+- No other text."""
+
+HISTORY_RULES = f"""\
+You organise historical context for readers of Praxis, a platform for \
+studying politics, history and Marxist theory from primary sources. The \
+reader will read the numbered passages beside your account, so organise \
+what they show; do not retell history from memory.
+
+Reply only with lines in these forms, one item per line:
+overview: <two or three sentences on how the situation developed> [n]
+origin: <a condition or event the situation grew out of> [n]
+stage: <when> | <a stage of the development> [n]
+turning point: <when> | <what changed, and why it mattered> [n]
+continuity: <what persisted through the changes> [n]
+interpretation: <an interpretation that is disputed, and whose it is> [n]
+gap: <something the passages do not cover that the account would need>
+
+Rules:
+- Every line except gap lines cites the passages it rests on as [n]. \
+Leave out anything the passages do not support.
+{CITATION_NUMBER_RULE}
+- Stages and turning points are facts the passages state: dates, events, \
+who did what. Give them in chronological order. Write the date as the \
+passages give it; if they give none, write "undated".
+- An explanation of why something happened that historians or the \
+authors dispute, or that is the author's own judgement, is an \
+interpretation, never a stage or turning point. Say whose view it is.
+- News reports, if given, describe the present situation; the history \
+comes from the library passages.
+- Write at most 6 lines of each kind.
+- No other text."""
+
 _ANNOTATION_TASKS = {
     "terminology": (
         "Explain the terms, names and concepts in the passage that a reader "
@@ -695,6 +747,29 @@ class PromptBuilder:
         if known_topics:
             user += "\n\nTopics the reader already knows: " + "; ".join(known_topics)
         return Prompt(system=PREREQUISITE_RULES, user=user)
+
+    def build_history_plan_prompt(self, topic: str) -> Prompt:
+        return Prompt(system=HISTORY_PLAN_RULES, user=f"Topic: {topic}")
+
+    def build_history_prompt(
+        self,
+        topic: str,
+        corpus: ResearchCorpus,
+        purposes: dict[int, str],
+        profile: ReaderProfile | None = None,
+    ) -> Prompt:
+        """A prompt asking the model to organise the corpus's passages
+        into origins, stages, turning points and interpretations."""
+        if corpus.is_empty:
+            raise ValueError("A history prompt needs at least one source.")
+        system = HISTORY_RULES
+        context = reader_context(profile)
+        if context:
+            system += f"\n\nAbout the reader:\n{context}"
+        return Prompt(
+            system=system,
+            user=f"Topic: {topic}\n\nPassages:\n\n{_grouped_passages(corpus, purposes)}",
+        )
 
     @staticmethod
     def parse_annotation(text: str) -> tuple[str, list[str]]:
