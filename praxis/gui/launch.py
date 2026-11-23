@@ -26,13 +26,20 @@ from praxis.persistence import Database
 def build_window(application: Application, runner: TaskRunner) -> MainWindow:
     """The window with every page, each View given its Controller."""
     window = MainWindow(runner)
-    window.add_page("Home", HomeView(HomeController(application), runner))
-    window.add_page("Library", LibraryView(
-        LibraryController(application), ReadingController(application), runner
-    ))
 
     def open_reading(document_id: str, paragraph: int) -> None:
         window.show_page("Library").open_text(document_id, paragraph)
+
+    window.add_page("Home", HomeView(
+        HomeController(application), runner,
+        open_reading=open_reading,
+        open_event=lambda event_id: window.show_page("News").open_event(event_id),
+        open_path=lambda path_id: window.show_page("Learning paths").open_path(path_id),
+        news_loaded=lambda dashboard: window.page("News").show_dashboard(dashboard),
+    ))
+    window.add_page("Library", LibraryView(
+        LibraryController(application), ReadingController(application), runner
+    ))
 
     window.add_page("News", NewsView(NewsController(application), runner, open_reading))
     window.add_page("Research", ResearchView(ResearchController(application), runner, open_reading))
@@ -65,6 +72,7 @@ def run(argv: list[str] | None = None) -> int:
     runner = ThreadTaskRunner()
     window = build_window(application, runner)
     window.show()
+    window.page("Home").fetch_news()  # the home page opens on the latest news
     try:
         return qt.exec()
     finally:

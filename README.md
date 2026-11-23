@@ -91,8 +91,14 @@ python -m praxis gui            # or: python -m praxis.gui
 
 Choose a page on the left:
 
-- **Home**: shows whether a language model is set up. On first run, press
-  the button that loads the fourteen bundled texts into the library.
+- **Home**: where to start. **In the news** shows the most widely reported
+  events as cards, fetched when the app starts (press Refresh to fetch
+  again); click one to open it on the News page. **Pick up where you left
+  off** shows texts you have begun and not finished, with your progress;
+  click one to continue at the paragraph you reached. **Your learning
+  path** shows the path in progress and its next step; Continue opens that
+  step's reading. Home also says whether a language model is set up, and
+  on first run offers to load the fourteen bundled texts.
 - **Library**: search the texts or filter them by topic, then click one to
   read it. The reader fills the page and shows the whole text as one
   scroll; how far you get is saved in your profile. Click a paragraph's

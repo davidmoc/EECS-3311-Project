@@ -133,24 +133,26 @@ class NewsView(QWidget):
         stored news is loaded in the background."""
         days = self.days.value()
 
-        def done(dashboard: Dashboard) -> None:
-            self.dashboard = dashboard
-            self.event_list.clear()
-            for event in dashboard.events:
-                item = QListWidgetItem(results.event_card(event))
-                item.setData(Qt.ItemDataRole.UserRole, str(event.id))
-                self.event_list.addItem(item)
-            notes = list(dashboard.warnings)
-            if dashboard.events:
-                reports = sum(len(e.reports) for e in dashboard.events)
-                notes.insert(0, f"The {len(dashboard.events)} most widely reported of "
-                                f"{dashboard.total_events} events ({reports} reports).")
-            else:
-                notes.insert(0, EMPTY)
-            self.message.setText("\n".join(notes))
-
         self._run("Fetching the news" if refresh else "Loading the news",
-                  lambda: self._controller.dashboard(days, refresh), done)
+                  lambda: self._controller.dashboard(days, refresh), self.show_dashboard)
+
+    def show_dashboard(self, dashboard: Dashboard) -> None:
+        """List the dashboard's events. The home page hands over the
+        dashboard it fetched at start-up, so it is not fetched twice."""
+        self.dashboard = dashboard
+        self.event_list.clear()
+        for event in dashboard.events:
+            item = QListWidgetItem(results.event_card(event))
+            item.setData(Qt.ItemDataRole.UserRole, str(event.id))
+            self.event_list.addItem(item)
+        notes = list(dashboard.warnings)
+        if dashboard.events:
+            reports = sum(len(e.reports) for e in dashboard.events)
+            notes.insert(0, f"The {len(dashboard.events)} most widely reported of "
+                            f"{dashboard.total_events} events ({reports} reports).")
+        else:
+            notes.insert(0, EMPTY)
+        self.message.setText("\n".join(notes))
 
     def open_event(self, event_id: UUID) -> None:
         self.selected = event_id
