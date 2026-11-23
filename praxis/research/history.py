@@ -150,7 +150,7 @@ def parse_history(text: str) -> ParsedHistory | None:
             gaps.append(body)
             continue
         evidence = tuple(cited_numbers(body))
-        clean = _strip_citations(body)
+        clean = strip_citations(body)
         if label == "overview":
             overview.append(clean)
             overview_evidence.extend(n for n in evidence if n not in overview_evidence)
@@ -201,7 +201,7 @@ def suggested_readings(cited: tuple[Source, ...]) -> tuple[SuggestedReading, ...
     return tuple(sorted(readings, key=lambda r: -r.cited))
 
 
-def _strip_citations(text: str) -> str:
+def strip_citations(text: str) -> str:
     stripped = _CITATIONS.sub("", text)
     stripped = re.sub(r"\(\s*\)", "", stripped)
     return re.sub(r"\s+([.,;:])", r"\1", stripped).strip()

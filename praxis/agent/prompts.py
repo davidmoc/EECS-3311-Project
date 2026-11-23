@@ -376,6 +376,58 @@ comes from the library passages.
 - Write at most 6 lines of each kind.
 - No other text."""
 
+MAX_CONCEPTS = 4
+
+CONCEPT_RULES = f"""\
+You choose theory for an analysis in Praxis, a platform for studying \
+politics, history and Marxist theory from primary sources. Given an issue \
+and the evidence gathered on it, name the Marxist concepts that genuinely \
+help explain it (for example class, labour, capital, ownership, the state, \
+imperialism, ideology, material conditions), so that theoretical passages \
+can be found in the library.
+
+Reply only with lines in this form:
+concept: <concept> | <keywords for finding it in the library> | <why it bears on this evidence>
+
+Rules:
+- Name 1 to {MAX_CONCEPTS} concepts, only those the evidence gives reason \
+to apply. Do not force the issue into a concept the evidence does not \
+support.
+- If the reader asked for a particular framework, include its concepts \
+first.
+- Keywords use the vocabulary of 19th and early 20th century Marxist \
+texts in translation, at most six. Leave out author names.
+- No other text."""
+
+ANALYSIS_RULES = f"""\
+You write Marxist theoretical analysis for readers of Praxis, a platform \
+for studying politics, history and Marxist theory from primary sources. \
+Analyse the issue using historical and dialectical materialism, \
+connecting the theoretical passages to the evidence passages. The reader \
+reads the passages beside your analysis.
+
+Reply only with lines in these forms, one item per line:
+condition: <material|class|production|institution|ideology|development|contradiction> | <what the evidence shows> [n]
+application: <concept> | <how the theory passage applies to the evidence> [n, m]
+claim: <supported|tentative> | <an interpretation the analysis reaches> [n, m]
+alternative: <another plausible reading within Marxist analysis> [n]
+limit: <where a concept does not fit, or the evidence is too thin>
+
+Rules:
+- Conditions rest on evidence passages only. An application cites at \
+least one theory passage and at least one evidence passage.
+{CITATION_NUMBER_RULE}
+- Every condition, application, claim and alternative cites the passages \
+it rests on as [n]. Leave out anything they do not support.
+- A claim is "supported" only if several evidence passages bear it out; \
+otherwise it is "tentative". Interpretations are never stated as \
+uncontested fact.
+- Where Marxists would read the evidence differently, give the \
+alternative. Where a concept does not fit, say so in a limit line rather \
+than forcing it.
+- Write at most 5 lines of each kind.
+- No other text."""
+
 _ANNOTATION_TASKS = {
     "terminology": (
         "Explain the terms, names and concepts in the passage that a reader "
@@ -773,6 +825,49 @@ class PromptBuilder:
             system=system,
             user=f"Topic: {topic}\n\nPassages:\n\n{_grouped_passages(corpus, purposes)}",
         )
+
+    def build_concept_prompt(
+        self, issue: str, evidence: list[Source], framework: str | None = None
+    ) -> Prompt:
+        """A prompt asking which concepts apply, given the evidence."""
+        user = f"Issue: {issue}"
+        if framework:
+            user += f"\n\nThe reader asked for this framework: {framework}"
+        if evidence:
+            user += "\n\nEvidence:\n\n" + "\n\n".join(
+                f"{source.label} {source.citation.format()}\n{source.citation.quoted_text}"
+                for source in evidence
+            )
+        else:
+            user += "\n\nNo evidence passages were found."
+        return Prompt(system=CONCEPT_RULES, user=user)
+
+    def build_analysis_prompt(
+        self,
+        issue: str,
+        corpus: ResearchCorpus,
+        purposes: dict[int, str],
+        framework: str | None = None,
+        established: list[str] = (),
+        profile: ReaderProfile | None = None,
+    ) -> Prompt:
+        """A prompt asking for the analysis. ``established`` are findings
+        a research session already made, offered as context."""
+        if corpus.is_empty:
+            raise ValueError("An analysis prompt needs at least one source.")
+        system = ANALYSIS_RULES
+        context = reader_context(profile)
+        if context:
+            system += f"\n\nAbout the reader:\n{context}"
+        user = f"Issue: {issue}"
+        if framework:
+            user += f"\n\nThe reader asked for this framework: {framework}"
+        if established:
+            user += "\n\nFindings the research already established:\n" + "\n".join(
+                f"- {line}" for line in established
+            )
+        user += f"\n\nPassages:\n\n{_grouped_passages(corpus, purposes)}"
+        return Prompt(system=system, user=user)
 
     @staticmethod
     def parse_annotation(text: str) -> tuple[str, list[str]]:
