@@ -638,13 +638,16 @@ class PromptBuilder:
 
         Each candidate is (heading, body): the heading starts with its
         ``[n]`` label; the body gives its details and matching passages.
+        With no candidates, the model can only suggest works outside the
+        library.
         """
-        if not candidates:
-            raise ValueError("A recommendation prompt needs at least one candidate.")
         system = RECOMMENDATION_RULES
         context = reader_context(profile)
         if context:
             system += f"\n\nAbout the reader:\n{context}"
+        if not candidates:
+            # Only external suggestions are possible (UC07's alternative flow).
+            return Prompt(system=system, user=f"Topic: {topic}\n\nNo text in the library matched this topic.")
         user = f"Topic: {topic}\n\nCandidates:\n\n" + "\n\n".join(
             f"{heading}\n{body}" for heading, body in candidates
         )

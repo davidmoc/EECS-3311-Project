@@ -1,7 +1,5 @@
 """The recommendation prompt and the parsing of the model's ranking (F07)."""
 
-import pytest
-
 from praxis.agent.prompts import MAX_RECOMMENDATIONS, PromptBuilder
 from praxis.reader_model import KnowledgeLevel, ReaderProfile
 from praxis.reading.recommendations import ExternalSuggestion, parse_recommendations
@@ -31,9 +29,10 @@ def test_prompt_describes_the_reader_only_when_something_is_known():
     assert "class struggle" in prompt.system
 
 
-def test_prompt_needs_a_candidate():
-    with pytest.raises(ValueError):
-        PromptBuilder().build_recommendation_prompt("imperialism", [])
+def test_prompt_without_candidates_says_the_library_has_nothing():
+    prompt = PromptBuilder().build_recommendation_prompt("imperialism", [])
+
+    assert "No text in the library matched" in prompt.user
 
 
 def test_parse_reads_ranked_lines_and_external_suggestions():
