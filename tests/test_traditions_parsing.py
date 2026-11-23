@@ -169,3 +169,16 @@ def test_a_disagreement_headed_with_its_sides_is_split_at_the_bar():
         ("Leninism vs Anarchism", "A dictatorship of the proletariat."),
         ("", "Whether the state can serve the revolution."),
     ]
+
+
+def test_prompts_keep_leninism_within_marxism_and_editors_out_of_own_words():
+    # A live run listed Leninism apart from Marxism, so the platform's
+    # "Marxist assessment" criticised Leninism; and it took an editor's
+    # introduction to Luxemburg as her own words.
+    builder = PromptBuilder()
+    assert "do not list Leninism as another tradition" in builder.build_tradition_prompt("x", []).system
+    corpus = ResearchCorpus()
+    book = Book(title="T", author="A", text="Text.")
+    source = corpus.add_passage(book, book.passages()[0])
+    system = builder.build_tradition_comparison_prompt("x", [("Marxism", [source], [])]).system
+    assert "editor's introduction" in system

@@ -443,7 +443,9 @@ perspective: <tradition> | <authors in the library who represent it, comma-separ
 none: <why no other tradition holds a materially different position>
 
 Rules:
-- The first line is the Marxist perspective, named "Marxism".
+- The first line is the Marxist perspective, named "Marxism". It is the \
+platform's Marxist-Leninist standpoint and includes Marx, Engels and \
+Lenin; do not list Leninism as another tradition.
 - Then add up to {MAX_TRADITIONS - 1} other traditions only if they hold a \
 materially different position on this topic. Do not invent a disagreement \
 to produce balance. If no other tradition differs materially, write the \
@@ -477,6 +479,9 @@ Rules:
 - Name each tradition exactly as its passage heading does.
 - State a position from the tradition's own passages where there are \
 any. If only others describe it, say that it is their description.
+- A passage in a representative's book may be an editor's introduction \
+or a quotation of another writer. Do not present it as the tradition's \
+own words.
 - A disagreement cites passages from at least two traditions. Do not \
 invent one the passages do not show; if the traditions agree on \
 something, say so in a position line.
