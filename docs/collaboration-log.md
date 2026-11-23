@@ -216,7 +216,7 @@ platform.openai.com.
   - `SourceComparison.compare()` is not a method; the comparison is one model call in a fixed line format (`comparability:`, `similarity:`, `difference: <aspect> |`, `disagreement:`, `observation:`, `uncertain:`), parsed by `parse_comparison`. SD06's "low comparability" branch is `comparability: not comparable`. It becomes the first warning, and the passages are still shown.
   - Points are checked against the passages (`check_points`). A similarity, difference or disagreement must cite passages from at least two sources; an observation must cite at least one. Points that fail are dropped and counted in a warning. Disagreements (facts) and observations (interpretation of a source's standpoint) are shown under their own headings (UC10: "the disagreement is distinguished from differences in framing"; F10: bias judgements "identified as analysis").
   - `ResearchView`/`ResearchController` are played by `praxis compare`. Comparisons are not stored yet, and cannot yet be started from a research session or an event.
-- **Human contribution:** Asked for the next five slices. The code has not been reviewed yet.
+- **Human contribution:** Asked for the next five slices. Reviewed the code.
 - **Outcome:** Seven code commits and this documentation commit.
 
 ### 2026-11-22 — Source and framing comparison, second slice: stored comparisons and comparison from research (F10)
@@ -231,7 +231,7 @@ platform.openai.com.
 - **Design changes from Stage 1 introduced here:**
   - Comparisons are stored whole as JSON with the passage text, like research results, and only when two or more sources had passages. A failure to store becomes a warning.
   - Comparing from a research view is `compare_research_sources(session_id)`: the research question is the subject, and the research's own passages are compared (up to four texts, those that supplied most passages, at most six passages each). It needs a research session that drew on two texts or more. Comparing from an event waits for F01/F02.
-- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Human contribution:** Reviewed the code.
 - **Outcome:** Six code commits and this documentation commit.
 
 ### 2026-11-22 — News dashboard, first slice: fetching and keeping news (F01)
@@ -248,7 +248,7 @@ platform.openai.com.
   - SD03 fetches news inside `getDashboardEvents()`. Here fetching is `NewsService.refresh()`, and the stored articles are what is shown. The dashboard can therefore fall back to earlier news when no source is reachable (SD03's "cached/partial events").
   - Articles are stored as `NewsArticle` documents in the document table, keyed by their link. Questions, research and comparisons can therefore draw on news through the same passage search, which UC03's News Provider actor needs. Only the feed's syndicated summary (at most 1,500 characters) is kept, and the licence marks it as not reproducible, so quotations stay within the excerpt limit.
   - `NewsController`/`NewsView` are played by the `news` commands. No clustering, summaries or event cards yet; those are the next slice.
-- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Human contribution:** Reviewed the code.
 - **Outcome:** Three code commits and this documentation commit.
 
 ### 2026-11-22 — News dashboard, second slice: events, summaries and the dashboard (F01)
@@ -267,7 +267,7 @@ platform.openai.com.
   - `NewsSummaryService.summarize()` is one model call per event of two or more reports. A single report is not summarised: the card shows the outlet's own summary, labelled as such, and says no other outlet in the feeds reported it (F01: "Events with insufficient information … should not be presented as confidently established"). SD03's "summary fails" branch also covers a summary that cites no report or a report that does not exist: the card then shows headlines only.
   - Events are stored, keyed by the set of their reports, so an unchanged event reuses its summary and can be opened by id (F02). Only the `--limit` most widely reported events (default 8) are summarised, which bounds model calls.
   - `NewsView`/`NewsController` are played by `news dashboard`. Opening an event (F02) is the next slice.
-- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Human contribution:** Reviewed the code.
 - **Outcome:** Five code commits and this documentation commit.
 
 ### 2026-11-22 — Expandable event exploration (F02)
@@ -289,7 +289,7 @@ platform.openai.com.
   - Whether an event is still developing is decided from dates (latest report today or yesterday), not by the model.
   - SD03's `research(event)` is `research_event(event)`: the research question is built from the headline, and the event's reports are the first sources, so the research is about the event actually reported rather than whatever a search finds.
   - `--research` and `--compare` replace the expanded view rather than following it, so one command makes at most one kind of model work.
-- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Human contribution:** Reviewed the code.
 - **Outcome:** Seven code commits and this documentation commit.
 
 ### 2026-11-22 — Intelligent reading recommendations (F07)
