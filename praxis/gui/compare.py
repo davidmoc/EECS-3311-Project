@@ -29,7 +29,7 @@ from praxis.comparison import SourceComparison, SourceSelection
 from praxis.documents import Document
 from praxis.gui import results
 from praxis.gui.tasks import TaskRunner, describe_error
-from praxis.gui.widgets import OpenReading, lock_while_busy, result_browser
+from praxis.gui.widgets import OpenReading, item_list, lock_while_busy, result_browser
 from praxis.persistence.comparisons import ComparisonSummary
 
 
@@ -67,7 +67,7 @@ class CompareView(QWidget):
         self.subject.returnPressed.connect(self.compare)
         self.compare_button = QPushButton("Compare (AI)")
         self.compare_button.clicked.connect(self.compare)
-        self.history = QListWidget()
+        self.history = item_list()
         self.history.itemClicked.connect(
             lambda item: self.open_comparison(UUID(item.data(Qt.ItemDataRole.UserRole)))
         )

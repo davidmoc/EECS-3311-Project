@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QUrl
-from PySide6.QtWidgets import QTextBrowser, QWidget
+from PySide6.QtWidgets import QListWidget, QTextBrowser, QWidget
 
 from praxis.gui.render import parse_read_link
 from praxis.gui.tasks import TaskRunner
@@ -32,3 +32,14 @@ def result_browser(open_reading: OpenReading | None = None) -> QTextBrowser:
 
     browser.anchorClicked.connect(clicked)
     return browser
+
+
+def item_list() -> QListWidget:
+    """A list whose entries run to several lines (an event card, a saved
+    item with its date), shaded alternately and spaced so each entry reads
+    as one. A live run showed the news cards running together without it."""
+    widget = QListWidget()
+    widget.setWordWrap(True)
+    widget.setAlternatingRowColors(True)
+    widget.setSpacing(3)
+    return widget

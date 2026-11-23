@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
     QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
@@ -33,7 +32,7 @@ from PySide6.QtWidgets import (
 from praxis.app import Application
 from praxis.gui.render import escape
 from praxis.gui.tasks import TaskRunner, describe_error
-from praxis.gui.widgets import lock_while_busy
+from praxis.gui.widgets import item_list, lock_while_busy
 from praxis.library import LibraryError
 from praxis.workspace import SavedItem, SavedItemKind
 
@@ -119,7 +118,7 @@ class WorkspaceView(QWidget):
         for kind in SavedItemKind:
             self.kind_box.addItem(kind.value, kind)
         self.kind_box.currentIndexChanged.connect(lambda _index: self.refresh())
-        self.item_list = QListWidget()
+        self.item_list = item_list()
         self.item_list.itemClicked.connect(lambda item: self.open_item(item.data(Qt.ItemDataRole.UserRole)))
 
         self.note_title = QLineEdit()

@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
     QListWidgetItem,
     QPushButton,
     QSplitter,
@@ -29,7 +28,7 @@ from PySide6.QtWidgets import (
 from praxis.app import Application
 from praxis.gui import results
 from praxis.gui.tasks import TaskRunner, describe_error
-from praxis.gui.widgets import OpenReading, lock_while_busy, result_browser
+from praxis.gui.widgets import OpenReading, item_list, lock_while_busy, result_browser
 from praxis.persistence.research import ResearchSessionSummary
 
 
@@ -79,7 +78,7 @@ class SessionsView(QWidget):
         self._controller = controller
         self._runner = runner
 
-        self.session_list = QListWidget()
+        self.session_list = item_list()
         self.session_list.itemClicked.connect(self._open_item)
         self.output = result_browser(open_reading)
 

@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QListWidgetItem,
     QPushButton,
     QSpinBox,
@@ -27,7 +26,7 @@ from PySide6.QtWidgets import (
 from praxis.app import Application
 from praxis.gui import results
 from praxis.gui.tasks import TaskRunner, describe_error
-from praxis.gui.widgets import OpenReading, lock_while_busy, result_browser
+from praxis.gui.widgets import OpenReading, item_list, lock_while_busy, result_browser
 from praxis.persistence.learning_paths import LearningPathSummary
 from praxis.reader_model.events import PrerequisiteMarkedKnown
 from praxis.reading import LearningPath, StepStatus
@@ -64,7 +63,7 @@ class PathsView(QWidget):
         self._controller = controller
         self.path: LearningPath | None = None
 
-        self.path_list = QListWidget()
+        self.path_list = item_list()
         self.path_list.itemClicked.connect(
             lambda item: self.open_path(UUID(item.data(Qt.ItemDataRole.UserRole)))
         )

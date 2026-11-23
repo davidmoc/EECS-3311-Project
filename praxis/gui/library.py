@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
     QListWidgetItem,
     QPushButton,
     QSpinBox,
@@ -32,7 +31,7 @@ from praxis.app import Application
 from praxis.documents import Annotation, AnnotationType, Document, Passage
 from praxis.gui import render
 from praxis.gui.tasks import TaskRunner, describe_error
-from praxis.gui.widgets import lock_while_busy
+from praxis.gui.widgets import item_list, lock_while_busy
 from praxis.reader_model.events import DocumentRead
 from praxis.reader_model.personalization import RequestPreferences
 from praxis.reading import AnnotationResult
@@ -122,7 +121,7 @@ class LibraryView(QWidget):
         self.search_box.returnPressed.connect(self.search)
         self.topic_box = QComboBox()
         self.topic_box.currentIndexChanged.connect(self.filter_by_topic)
-        self.text_list = QListWidget()
+        self.text_list = item_list()
         self.text_list.itemActivated.connect(self._open_item)
         self.text_list.itemClicked.connect(self._open_item)
         left = QWidget()

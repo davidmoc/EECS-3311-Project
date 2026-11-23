@@ -15,7 +15,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QListWidgetItem,
     QPushButton,
     QSpinBox,
@@ -27,7 +26,7 @@ from PySide6.QtWidgets import (
 from praxis.app import Application
 from praxis.gui import results
 from praxis.gui.tasks import TaskRunner, describe_error
-from praxis.gui.widgets import OpenReading, lock_while_busy, result_browser
+from praxis.gui.widgets import OpenReading, item_list, lock_while_busy, result_browser
 from praxis.news.service import Dashboard
 
 EMPTY = "No current news is stored. Press “Fetch the latest news”."
@@ -79,8 +78,7 @@ class NewsView(QWidget):
             top.addWidget(widget)
         top.addStretch()
 
-        self.event_list = QListWidget()
-        self.event_list.setWordWrap(True)
+        self.event_list = item_list()
         self.event_list.itemClicked.connect(
             lambda item: self.open_event(UUID(item.data(Qt.ItemDataRole.UserRole)))
         )
