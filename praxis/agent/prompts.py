@@ -560,7 +560,7 @@ class PromptBuilder:
 
     def build_plan_prompt(self, objective: str, profile: ReaderProfile | None = None) -> Prompt:
         system = RESEARCH_PLAN_RULES
-        context = reader_context(profile)
+        context = reader_context(profile, objective)
         if context:
             system += (
                 f"\n\nAbout the reader:\n{context}\n"
@@ -623,7 +623,7 @@ class PromptBuilder:
             f"{SOURCE_FIRST_RULES}\n\n{RESEARCH_SYNTHESIS_FORMAT}\n\n"
             f"{_DEPTH_GUIDANCE[depth]}"
         )
-        context = reader_context(profile)
+        context = reader_context(profile, objective)
         if context:
             system += f"\n\nAbout the reader:\n{context}"
 
@@ -719,7 +719,7 @@ class PromptBuilder:
         )
         depth = PersonalizationService.determine_explanation_depth(profile)
         system = f"{SOURCE_FIRST_RULES}\n\n{_DEPTH_GUIDANCE[depth]}"
-        context = reader_context(profile)
+        context = reader_context(profile, question)
         if context:
             system += f"\n\nAbout the reader:\n{context}"
 
@@ -784,7 +784,7 @@ class PromptBuilder:
         if len(sources) < 2 or any(not passages for _, passages in sources):
             raise ValueError("A comparison prompt needs passages from at least two sources.")
         system = COMPARISON_RULES
-        context = reader_context(profile)
+        context = reader_context(profile, subject)
         if context:
             system += f"\n\nAbout the reader:\n{context}"
         user = f"Compare the sources on: {subject}\n\n"
@@ -847,7 +847,7 @@ class PromptBuilder:
         library.
         """
         system = RECOMMENDATION_RULES
-        context = reader_context(profile)
+        context = reader_context(profile, topic)
         if context:
             system += f"\n\nAbout the reader:\n{context}"
         if not candidates:
@@ -883,7 +883,7 @@ class PromptBuilder:
         if corpus.is_empty:
             raise ValueError("A history prompt needs at least one source.")
         system = HISTORY_RULES
-        context = reader_context(profile)
+        context = reader_context(profile, topic)
         if context:
             system += f"\n\nAbout the reader:\n{context}"
         return Prompt(
@@ -921,7 +921,7 @@ class PromptBuilder:
         if corpus.is_empty:
             raise ValueError("An analysis prompt needs at least one source.")
         system = ANALYSIS_RULES
-        context = reader_context(profile)
+        context = reader_context(profile, issue)
         if context:
             system += f"\n\nAbout the reader:\n{context}"
         user = f"Issue: {issue}"
@@ -957,7 +957,7 @@ class PromptBuilder:
         if not any(own or others for _, own, others in groups):
             raise ValueError("A tradition comparison prompt needs at least one passage.")
         system = TRADITION_COMPARISON_RULES
-        context = reader_context(profile)
+        context = reader_context(profile, topic)
         if context:
             system += f"\n\nAbout the reader:\n{context}"
         sections = []

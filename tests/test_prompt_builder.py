@@ -119,3 +119,16 @@ def test_every_prompt_showing_passages_says_paragraph_numbers_are_not_citations(
     ]
 
     assert all(CITATION_NUMBER_RULE in prompt.system for prompt in prompts)
+
+
+def test_prompts_put_the_readers_knowledge_of_their_topic_first():
+    builder = PromptBuilder()
+    corpus = corpus_with("Surplus value is unpaid labour.")
+
+    question = builder.build_question_prompt("Where does surplus value come from?", corpus, informed_profile())
+    research = builder.build_research_prompt("imperialism and war", corpus, {}, informed_profile())
+    analysis = builder.build_analysis_prompt("the Paris Commune", corpus, {}, profile=informed_profile())
+
+    assert "On this topic:\n- Says they are at advanced level in surplus value" in question.system
+    assert "On this topic:\n- Probably at introductory level in imperialism" in research.system
+    assert "Nothing is recorded about what they know of this topic" in analysis.system
