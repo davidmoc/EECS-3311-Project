@@ -36,7 +36,12 @@ from praxis.persistence.research import SQLResearchRepository
 from praxis.reader_model.events import LearningEventBus
 from praxis.reader_model.service import ReaderProfileService
 from praxis.reader_model.updater import ReaderModelUpdater
-from praxis.reading import AnnotationService, PrerequisiteService, RecommendationService
+from praxis.reading import (
+    AnnotationService,
+    IdeologicalContextService,
+    PrerequisiteService,
+    RecommendationService,
+)
 from praxis.tools import ToolFactory, ToolManager
 from praxis.workspace.service import WorkspaceService
 
@@ -53,6 +58,7 @@ class Application:
     annotations: AnnotationService
     recommendations: RecommendationService
     prerequisites: PrerequisiteService
+    traditions: IdeologicalContextService
     news: NewsService
     # False when the caller passed in a database it will close itself.
     owns_database: bool = True
@@ -106,6 +112,7 @@ def build_application(
         prerequisites=PrerequisiteService(
             tools, llm, repository=SQLLearningPathRepository(database)
         ),
+        traditions=IdeologicalContextService(tools, library, llm),
         news=NewsService(
             news_providers if news_providers is not None
             else [RSSNewsAdapter(feed) for feed in read_feeds()],

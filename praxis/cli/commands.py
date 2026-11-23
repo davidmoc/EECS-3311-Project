@@ -39,7 +39,11 @@ from praxis.reading import (
     StepStatus,
     RecommendationError,
     RecommendationResult,
+    TraditionsComparison,
+    TraditionsError,
+    TraditionsStatus,
 )
+from praxis.reading.traditions import StatementKind
 from praxis.research import ResearchBudget, ResearchError
 from praxis.research.analysis import AnalysisItemKind, AnalysisStatus, MaterialistAnalysis
 from praxis.research.history import ContextStatus, HistoricalContext, HistoryItemKind
@@ -71,7 +75,7 @@ application_factory = build_application
 # Errors whose message is meant for the user, not a stack trace.
 USER_ERRORS = (
     AgentError, AnnotationError, LibraryError, NewsError, NewsProviderError,
-    PrerequisiteError, RecommendationError, ResearchError, ValueError,
+    PrerequisiteError, RecommendationError, ResearchError, TraditionsError, ValueError,
 )
 
 # Longest stretch of a passage printed by `ask`; the rest is one command away.
@@ -346,6 +350,92 @@ def _print_analysis(analysis: MaterialistAnalysis) -> None:
     _print_warnings(analysis.warnings, analysis.tokens_used)
 
 
+# --- leftist traditions (F12) -------------------------------------------------
+
+
+@app.command("traditions")
+def traditions(
+    topic: Annotated[str, typer.Argument(help="Topic or theoretical question, in quotes.")],
+) -> None:
+    """Compare Marxism with other leftist traditions that differ on a topic, from their texts."""
+    with session() as application:
+        result = application.traditions.compare_traditions(topic, application.profiles.get_profile())
+    _print_traditions(result)
+
+
+_STATEMENT_HEADINGS = {
+    StatementKind.POSITION: "Position",
+    StatementKind.CONDITIONS: "Conditions it developed in",
+    StatementKind.ASSESSMENT: "Marxist assessment (the platform's view, not its own)",
+}
+
+
+def _print_traditions(result: TraditionsComparison) -> None:
+    heading = f"Leftist traditions on: {result.topic}"
+    if result.research_session:
+        heading += f"  (research session {result.research_session})"
+    typer.secho(heading, bold=True)
+    named = [
+        p.name + (f" ({', '.join(p.tradition.representatives)})" if p.tradition.representatives else "")
+        for p in result.perspectives
+    ]
+    if named:
+        typer.echo("Traditions (AI-chosen): " + "; ".join(named))
+    if result.left_out:
+        typer.echo("Left out, no material in the library: " + ", ".join(result.left_out))
+    if result.status is TraditionsStatus.NO_OTHER_TRADITION:
+        typer.echo("\nNo other leftist tradition differs materially on this topic (AI judgement).")
+        if result.none_reason:
+            typer.echo(f"  Why: {result.none_reason}")
+        typer.echo(f'For a Marxist analysis:  praxis analyze "{result.topic}"')
+        _print_warnings(result.warnings, result.tokens_used)
+        return
+
+    purposes = {}
+    for perspective in result.perspectives:
+        for number in perspective.own:
+            purposes[number] = f"{perspective.name}, own words"
+        for number in perspective.reported:
+            purposes[number] = f"{perspective.name}, described by others"
+    typer.echo()
+    _print_sources(result.sources, result.cited, purposes)
+
+    if result.status is TraditionsStatus.COMPARED:
+        label = "\nComparison (AI-generated from the passages"
+        label += ", adapted to your reader profile)" if result.personalized else ")"
+        typer.secho(label, bold=True)
+        for perspective in result.perspectives:
+            statements = [s for s in result.statements if s.tradition == perspective.name]
+            if not statements:
+                continue
+            typer.secho(f"\n{perspective.name}", underline=True)
+            for kind, title in _STATEMENT_HEADINGS.items():
+                for statement in result.statements_of(perspective.name, kind):
+                    if kind is StatementKind.POSITION and not statement.in_own_words:
+                        title = "Position, as others describe it"
+                    _print_history_line(f"{title}: {statement.text}", statement.evidence)
+        if result.disagreements:
+            typer.secho("\nWhere they disagree", underline=True)
+            for disagreement in result.disagreements:
+                _print_history_line(disagreement.text, disagreement.evidence)
+        if result.gaps:
+            typer.secho("\nGaps: what the passages cannot show", underline=True)
+            for gap in result.gaps:
+                _print_history_line(gap, ())
+    if result.perspectives and result.status is not TraditionsStatus.ONE_PERSPECTIVE:
+        typer.secho("\nRead each tradition in its own words", bold=True)
+        for perspective in result.perspectives:
+            if not perspective.readings:
+                typer.echo(f"  {perspective.name}: the library has no text by its representatives")
+                continue
+            for reading in perspective.readings:
+                typer.echo(f"  {perspective.name}: {reading.title} — {reading.author}")
+                typer.echo(
+                    f"    → praxis library read {str(reading.document_id)[:8]} --start {reading.start.lstrip('¶')}"
+                )
+    _print_warnings(result.warnings, result.tokens_used)
+
+
 # --- research (F03) ----------------------------------------------------------
 
 
@@ -520,6 +610,21 @@ def sessions_analyze(
         agent = application.agent
         analysis = agent.analyze_research(agent.find_research(session_id), framework)
     _print_analysis(analysis)
+
+
+@sessions_app.command("traditions")
+def sessions_traditions(
+    session_id: Annotated[str, typer.Argument(help="Session id or prefix.")],
+) -> None:
+    """Compare leftist traditions on a research session's question (F12)."""
+    with session() as application:
+        agent = application.agent
+        research = agent.get_research(agent.find_research(session_id))
+        result = application.traditions.compare_traditions(
+            research.objective, application.profiles.get_profile(),
+            research_session=str(research.session.id)[:8],
+        )
+    _print_traditions(result)
 
 
 @sessions_app.command("continue")
