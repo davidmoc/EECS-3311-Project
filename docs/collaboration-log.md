@@ -310,7 +310,7 @@ platform.openai.com.
   - UC07's "external source recommendations" are the model's `external:` lines, shown under their own heading as not checked. There is no web search to verify them.
   - F07's "should not imply that a recommendation is personalized when insufficient user information exists": the reader profile is sent only when `reader_context` allows it, and a sparse profile or personalization turned off produces a warning that the ranking rests on the topic alone. `recommend_next` (no topic) needs personalization on and at least one interest.
   - `ReadingController`/`ReaderView` are played by `praxis recommend`. Saving or opening a recommended text uses the existing `workspace save-text` and `library read` commands, which the output names. Recommendations are not stored.
-- **Human contribution:** Asked for the next five slices. The code has not been reviewed yet.
+- **Human contribution:** Asked for the next five slices. Reviewed the code.
 - **Outcome:** Five code commits and this documentation commit.
 
 ### 2026-11-22 — Prerequisite-guided learning, first slice: building a learning path (F08)
@@ -332,7 +332,7 @@ platform.openai.com.
   - SD05's `search(prerequisite topics)` is a `passage_search` per step, for the name and the model's keywords. Up to two passages, from different texts first, never from the target text, the news, or an earlier step.
   - SD05's "user already knows prerequisites" branch is `LearningPath.no_path_required`: the command says no path is needed and points to the target text, or to `recommend` for a topic.
   - `LearningPath` has an id, a creation time and a status per step, ready to be stored; storing paths and recording progress (UC08 steps 7–8) is the next slice. Until then the command points to `profile know` for steps the reader already understands.
-- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Human contribution:** Reviewed the code.
 - **Outcome:** Five code commits and this documentation commit.
 
 ### 2026-11-22 — Prerequisite-guided learning, second slice: stored paths and progress (F08)
@@ -350,7 +350,7 @@ platform.openai.com.
   - UC08 step 7 ("marks or demonstrates completion") is marking only: done, already known, skipped, or back to do. There is no test of understanding.
   - UC08 step 8 goes through the Observer pair as SD07 shows: the `path mark` controller publishes `PrerequisiteMarkedKnown` for done and known steps, and `ReaderModelUpdater` records the topic as stated knowledge at introductory level (never lowering a higher level). `PrerequisiteService` does not touch the reader model itself. Skipping publishes nothing, since skipping is not knowing.
   - When every step is dealt with, the command points on to the target text, or to `recommend` for a topic.
-- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Human contribution:** Reviewed the code.
 - **Outcome:** Four code commits and this documentation commit.
 
 ### 2026-11-22 — Historical context exploration (F09)
@@ -371,7 +371,7 @@ platform.openai.com.
   - UC09 step 4 ("evidence supporting those developments is retained"): each item keeps the source numbers it cites; items citing no retrieved passage are dropped and counted in a warning, as in F03. If nothing cited remains, no account is shown, only the passages.
   - UC09 lists a Web Search Provider; there is none, so history comes from the library only. News reports appear only as an event's starting sources, and are not suggested as readings.
   - Historical context is not stored and cannot be saved to the workspace yet. Opening it from an annotation or a research result (F09's other "contextual links") is not built; annotations already have a historical-context type (F06).
-- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Human contribution:** Reviewed the code.
 - **Outcome:** Six code commits and this documentation commit. The previous entry's commit count is corrected here from five to four.
 
 ### 2026-11-22 — Marxist theoretical analysis (F11)
@@ -390,7 +390,7 @@ platform.openai.com.
   - UC11's alternatives: "a tentative interpretation" is the claim label: a claim is "supported" only when the model says so, anything else counts as tentative, and an analysis with no supported claim carries a warning. "Multiple plausible interpretations … may be noted" is `alternative:`. "Does not force every issue into a predetermined category" is `limit:`, and the concept prompt names only concepts the evidence gives reason to apply.
   - With no evidence, nothing is analysed. With evidence but no theoretical passage for the chosen concepts, no analysis is written and the evidence is shown. Without a model, the evidence is returned. If the model names no usable concept, theory is searched for the framework, or the issue, as typed.
   - Analyses are not stored and cannot yet be saved to the workspace. Theoretical connections suggested within reading views (F06) are not built.
-- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Human contribution:** Reviewed the code.
 - **Outcome:** Six code commits and this documentation commit.
 
 ### 2026-11-22 — More library texts
@@ -423,7 +423,7 @@ platform.openai.com.
   - `IdeologicalContextService` keeps Stage 1's three methods. `findRelevantTraditions()` is one model call given the topic and the library's authors and titles; the model names each tradition's representatives from that list, so "its own words" means passages from those authors' texts (matched on surname by `authored_by`). `explainHistoricalContext()` is the comparison call, whose `conditions:` lines carry the historical context. `recommendRepresentativeTexts()` lists each tradition's own texts, the cited ones first. `LibraryService.search()` is replaced by the `passage_search` and `source_retrieval` tools, as in F07 and F10.
   - UC12's alternatives: a tradition the model names but for which nothing is found is left out and named as left out; if only Marxism has material, nothing is compared. A tradition with no text of its own may still be described from others' passages, and the reader is told. When the model judges that no tradition differs materially, the command says so and points to `analyze`. A disagreement must cite passages of two traditions or it is dropped; if none survives, the reader is told rather than shown one.
   - Without a model nothing can be compared, since the traditions come from the model; the command reports an error. Comparisons are not stored and cannot yet be saved to the workspace. Opening one from a news event is not built.
-- **Human contribution:** Asked for the next five slices. The code has not been reviewed yet.
+- **Human contribution:** Asked for the next five slices. Reviewed the code.
 - **Outcome:** Five code commits and this documentation commit.
 
 ### 2026-11-22 — Personalized and adaptive assistance (F14)
@@ -439,7 +439,7 @@ platform.openai.com.
   - `PersonalizationService.personalizePrompt()` is `personalize_prompt(profile, topic)`. It returns the text the prompt builders append, rather than rewriting a prompt. `determineExplanationDepth()` is `determine_explanation_depth(profile)`. `filterKnownPrerequisites()` stays in `PrerequisiteService` (F08), which already leaves out stated knowledge.
   - UC14 step 2 ("likely familiarity with the current topic"): knowledge areas sharing a word with the request's topic are listed first, under "On this topic". Step 4 ("knowledge gaps are considered"): when no area matches, the model is told not to assume the reader knows the topic and to define its basic terms. Matching is on words, so "the state" also matches "state capitalism". Annotations (F06) get no topic, since a paragraph has none to match, and keep the whole profile.
   - UC14's "The user can override the level of detail": `RequestPreferences` change a copy of the profile for one request and are never stored; `profile depth` and `profile personalize` remain the lasting settings. A request cannot turn personalization back on when the reader has turned it off. `--detail` is offered only where prompts use the explanation depth (questions, research synthesis, annotations).
-- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Human contribution:** Reviewed the code.
 - **Outcome:** Four code commits and this documentation commit.
 
 ### 2026-11-22 — Graphical interface, first slice: window, library, reader and profile
@@ -454,7 +454,7 @@ platform.openai.com.
   - MVC as Stage 1 describes it: each page is a View (`LibraryView`, `ProfileView`) that only collects input and shows results, and its Controller (`LibraryController`, `ReadingController`, `ProfileController`) calls the same services the CLI uses, through the same `Application`. Stage 1's `ReaderView` is the right half of the library page, not a page of its own, so choosing a text and reading it happen side by side. The CLI commands play the controller role for the CLI, as before.
   - Not in Stage 1: model calls take up to a minute, so they run on a worker thread (`ThreadTaskRunner`), with the result handed back to the GUI thread by a Qt signal. SQLite connections may not be used from two threads at once, so only one request runs at a time, and every widget that reads the database is disabled while one runs. Pages refresh when shown, except while a request runs.
   - Reading a page in the GUI records progress through the `LearningEventBus`, as `library read` does. Resetting the whole profile is left to the CLI (`profile reset`), which asks for confirmation.
-- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Human contribution:** Reviewed the code.
 - **Outcome:** Four code commits and this documentation commit.
 
 ### 2026-11-22 — Graphical interface, second slice: research, past research and learning paths
@@ -469,7 +469,7 @@ platform.openai.com.
 - **Design changes from Stage 1 introduced here:**
   - Stage 1's `ResearchView`/`ResearchController` handle research only. Here the research page is where the reader makes every request to the agent and the reading services, chosen from a list, because each takes the same input (a topic or question) and shows the same kind of result (passages, then labelled AI output).
   - Marking a learning-path step in the GUI publishes `PrerequisiteMarkedKnown`, as `path mark` does, so the GUI and CLI update the reader model the same way (Observer).
-- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Human contribution:** Reviewed the code.
 - **Outcome:** Three code commits, this documentation commit and one earlier interim log commit.
 
 ### 2026-11-22 — Graphical interface, third slice: news, compare and workspace
@@ -485,5 +485,5 @@ platform.openai.com.
   - Stage 1's `NewsView`/`NewsController` and `WorkspaceView`/`WorkspaceController` are pages of the main window. SD03's event actions (research, compare, history) are buttons on the opened event, as `news event --research/--compare/--history` are in the CLI.
   - F15 had no sequence diagram in Stage 1. In the GUI, `WorkspaceController.resume` decides where a saved item continues (text and paragraph, research session, comparison or event), and the window shows that page. A saved text resumes after the furthest paragraph read; one no longer in the library shows the saved copy and says so (F15's error case), with "Continue" disabled.
   - Saving is offered where the CLI offers `--save`, except comparisons, which are already stored and listed on the compare page.
-- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Human contribution:** Reviewed the code.
 - **Outcome:** Four code commits and this documentation commit.
