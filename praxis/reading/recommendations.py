@@ -287,8 +287,8 @@ class RecommendationService:
         )
 
     def _find_candidates(self, queries: list[str], warnings: list[str]) -> list[_Candidate]:
-        """Library texts (not news) with passages matching any query, most
-        matching passages first."""
+        """Library texts (not news) with passages matching any query: those
+        tagged with a query first, then by how many passages matched."""
         found: dict[UUID, _Candidate] = {}
         for query in queries:
             result = self._tools.execute_tool(PASSAGE_SEARCH, {"query": query, "limit": SEARCH_LIMIT})
@@ -305,7 +305,14 @@ class RecommendationService:
                     citation = document.cite(match.passage)
                     if citation.locator not in {c.locator for c in candidate.passages}:
                         candidate.passages.append(citation)
-        ranked = sorted(found.values(), key=lambda c: -c.hits)  # stable: first found wins ties
+        # Texts the catalogue tags with the topic come first: word matches
+        # alone can mislead (the index stems "imperialism" to match
+        # "Imperial Diet"). Sorting is stable, so the first found wins ties.
+        wanted = {" ".join(q.lower().split()) for q in queries}
+        ranked = sorted(
+            found.values(),
+            key=lambda c: (not wanted & {t.lower() for t in c.document.topics}, -c.hits),
+        )
         return ranked[:MAX_CANDIDATES]
 
 

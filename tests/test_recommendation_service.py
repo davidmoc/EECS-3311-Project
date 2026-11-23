@@ -221,3 +221,15 @@ def test_next_readings_need_personalization(library_database):
     profile.personalization_enabled = False
     with pytest.raises(RecommendationError, match="Personalization is off"):
         service(library_database).recommend_next(profile)
+
+
+def test_texts_tagged_with_the_topic_come_before_word_matches(library_database):
+    repository = SQLDocumentRepository(library_database)
+    manifesto, _ = documents(library_database)
+    manifesto.topics = ("bourgeoisie",)
+    repository.save(manifesto)
+
+    result = service(library_database).recommend_readings("Bourgeoisie")
+
+    # The Revolution text has more matching passages, but is not tagged.
+    assert result.recommendations[0].document.title == "The Communist Manifesto"
