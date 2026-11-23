@@ -106,6 +106,11 @@ python -m praxis history "the defeat of the 1848 revolution in Vienna"
 python -m praxis history "the history of capitalism" --broad   # trace it even if too broad
 python -m praxis news event 56eefcd0 --history   # the background of a news event
 
+# Marxist theoretical analysis (F11): evidence, theory, and how they connect
+python -m praxis analyze "the condition of English factory workers in the 1840s"
+python -m praxis analyze "1848 in Germany" --framework "the state as an instrument of class rule"
+python -m praxis sessions analyze 27004bab        # on a research session's sources
+
 # Source and framing comparison (F10): two to four texts, on one subject
 python -m praxis compare b67c02e1 abdc2552 --on "the peasantry"
 python -m praxis compare 59983f05:20-22 abdc2552:61,66   # named paragraphs
@@ -246,6 +251,17 @@ leave. Every item must cite a retrieved passage or it is left out. The
 texts it cites are listed to read further. `news event --history` starts
 from the event's reports and traces their background.
 
+`analyze` searches the library for evidence on the issue (or, with
+`sessions analyze`, reuses a research session's sources and findings), asks
+the model which Marxist concepts the evidence gives reason to apply (a
+`--framework` you name comes first), and searches for theoretical passages
+on each. The model then writes what the evidence shows, how each concept
+applies (citing both a theory passage and an evidence passage, or it is
+left out), interpretations marked supported or tentative, other readings
+within Marxist analysis, and the limits where a concept does not fit. An
+analysis with no supported claim is flagged as tentative. The theoretical
+texts it cites are listed to study further.
+
 Reading with `library read` updates your reading progress, interests and
 inferred knowledge automatically; `profile know` always overrides inference.
 
@@ -272,7 +288,7 @@ API key and no network access.
 | `praxis/news/` | `NewsProvider`, `RSSNewsAdapter`, `NewsService`, `EventClusterer`, `NewsSummaryService`, `Event` (F01) |
 | `praxis/llm/` | `LLMClient` interface and the OpenAI adapter |
 | `praxis/persistence/` | SQLite database and repositories |
-| `praxis/research/` | Research session, commands, plan, planner, concrete situation, assessment method, stopping policy, historical context (F09) |
+| `praxis/research/` | Research session, commands, plan, planner, concrete situation, assessment method, stopping policy, historical context (F09), Marxist analysis (F11) |
 | `praxis/reading/` | `AnnotationService` (F06), `RecommendationService` (F07), `PrerequisiteService` and `LearningPath` (F08) |
 | `praxis/reader_model/` | Reader profile, its service, event bus and updater |
 | `praxis/tools/` | Agent tools, tool manager and tool factory |
