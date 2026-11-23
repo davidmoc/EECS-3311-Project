@@ -289,6 +289,38 @@ well-known works that the library lacks and that the topic clearly needs. \
 Name only real works you are confident exist.
 - No other text."""
 
+MAX_PREREQUISITES = 6
+PREREQUISITE_KINDS = ("concept", "event", "theory", "text")
+
+PREREQUISITE_RULES = f"""\
+You plan learning paths for Praxis, a platform for studying politics, \
+history and Marxist theory from primary sources. The reader wants to \
+understand a target topic or text. Name what it assumes they already \
+understand: concepts, historical events, theories or earlier texts. The \
+reader will build that background from library passages instead of being \
+given a simplified answer.
+
+Reply only with blocks like this, one per prerequisite, ordered so that \
+each comes before anything that builds on it:
+prerequisite: <short name> | <concept|event|theory|text> | <essential|helpful>
+search: <keywords for finding it in the library>
+why: <one or two sentences on why the target assumes it>
+orientation: <two or three sentences of basic orientation, for when the library has nothing on it>
+
+Rules:
+- Name 2 to {MAX_PREREQUISITES} prerequisites, only ones the target \
+genuinely assumes. Do not include the target itself.
+- "essential" means the target cannot be understood without it; \
+"helpful" means it deepens understanding.
+- Search keywords use the vocabulary of 19th and early 20th century \
+political texts in translation, not modern summaries. Leave out author \
+names.
+- If topics the reader already knows are listed and a prerequisite is \
+one of them, use exactly that name for it.
+- The orientation is general background, not a summary of the target. \
+Where an interpretation is disputed, say so.
+- No other text."""
+
 _ANNOTATION_TASKS = {
     "terminology": (
         "Explain the terms, names and concepts in the passage that a reader "
@@ -653,6 +685,16 @@ class PromptBuilder:
             f"{heading}\n{body}" for heading, body in candidates
         )
         return Prompt(system=system, user=user)
+
+    def build_prerequisite_prompt(self, target: str, known_topics: list[str]) -> Prompt:
+        """A prompt asking what ``target`` assumes. ``known_topics`` are the
+        reader's known topics, listed so the model reuses their names and
+        the service can filter them out; empty when personalization does
+        not apply."""
+        user = f"Target: {target}"
+        if known_topics:
+            user += "\n\nTopics the reader already knows: " + "; ".join(known_topics)
+        return Prompt(system=PREREQUISITE_RULES, user=user)
 
     @staticmethod
     def parse_annotation(text: str) -> tuple[str, list[str]]:
