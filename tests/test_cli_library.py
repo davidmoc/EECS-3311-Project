@@ -19,7 +19,7 @@ def test_seed_imports_bundled_texts_offline(run):
 
     assert result.exit_code == 0
     assert "Imported The Communist Manifesto" in result.output
-    assert "5 imported, 0 skipped." in result.output
+    assert "14 imported, 0 skipped." in result.output
 
 
 def test_seeding_twice_does_not_duplicate(seeded, run):
@@ -46,7 +46,7 @@ def test_browse_by_topic(seeded, run):
 
 
 def test_topics_are_listed_with_counts(seeded, run):
-    assert "  3  history" in run("library", "topics").output
+    assert "  6  history" in run("library", "topics").output
 
 
 def _id_of(run, title_word):

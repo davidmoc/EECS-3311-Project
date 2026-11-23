@@ -63,7 +63,7 @@ python -m praxis sessions continue 27004bab --focus "the role of the peasantry"
 python -m praxis ask "What did Marx say about the state?"
 python -m praxis ask "Why are wages low?" --save -t wages   # keep it in the workspace
 
-# Reading library (F05): five public-domain texts ship in data/library
+# Reading library (F05): fourteen public-domain texts ship in data/library
 python -m praxis library seed                # load them (no network needed)
 python -m praxis library search "class struggle"
 python -m praxis library browse --topic imperialism

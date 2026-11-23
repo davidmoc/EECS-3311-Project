@@ -33,5 +33,68 @@
     "author": "V. I. Lenin",
     "publication_date": "1918-08-20",
     "topics": ["imperialism", "russian revolution", "war", "working class"]
+  },
+  {
+    "source_id": "46423",
+    "title": "A Contribution to the Critique of Political Economy",
+    "author": "Karl Marx",
+    "publication_date": "1859-01-01",
+    "topics": ["political economy", "value", "commodity", "money", "capitalism"]
+  },
+  {
+    "source_id": "39257",
+    "title": "Socialism: Utopian and Scientific",
+    "author": "Friedrich Engels",
+    "publication_date": "1880-01-01",
+    "topics": ["historical materialism", "socialism", "dialectics", "capitalism", "history"]
+  },
+  {
+    "source_id": "33111",
+    "title": "The Origin of the Family, Private Property and the State",
+    "author": "Friedrich Engels",
+    "publication_date": "1884-01-01",
+    "topics": ["state", "family", "private property", "class", "history"]
+  },
+  {
+    "source_id": "31933",
+    "title": "Landmarks of Scientific Socialism (Anti-Dühring)",
+    "author": "Friedrich Engels",
+    "publication_date": "1878-01-01",
+    "topics": ["dialectics", "historical materialism", "socialism", "state", "political economy"]
+  },
+  {
+    "source_id": "27814",
+    "title": "Feuerbach: The Roots of the Socialist Philosophy",
+    "author": "Friedrich Engels",
+    "publication_date": "1886-01-01",
+    "topics": ["historical materialism", "dialectics", "philosophy", "ideology"]
+  },
+  {
+    "source_id": "41405",
+    "title": "The Accumulation of Capital",
+    "author": "Rosa Luxemburg",
+    "publication_date": "1913-01-01",
+    "topics": ["imperialism", "capitalism", "political economy", "accumulation"]
+  },
+  {
+    "source_id": "38982",
+    "title": "Dictatorship vs. Democracy (Terrorism and Communism)",
+    "author": "Leon Trotsky",
+    "publication_date": "1920-01-01",
+    "topics": ["russian revolution", "dictatorship of the proletariat", "state", "revolution"]
+  },
+  {
+    "source_id": "32644",
+    "title": "Essays on the Materialistic Conception of History",
+    "author": "Antonio Labriola",
+    "publication_date": "1896-01-01",
+    "topics": ["historical materialism", "history", "ideology"]
+  },
+  {
+    "source_id": "23428",
+    "title": "The Conquest of Bread",
+    "author": "Peter Kropotkin",
+    "publication_date": "1892-01-01",
+    "topics": ["anarchism", "communism", "labour", "property"]
   }
 ]

@@ -14,10 +14,10 @@ search: class struggles, freeman and slave
 why: The target reads history as class conflict.
 orientation: History moves through conflicts between classes.
 
-prerequisite: Physiocrats | theory | helpful
-search: Physiocrats
-why: The method answers them.
-orientation: French economists who held land the only source of value.
+prerequisite: Phrenology | theory | helpful
+search: phrenology
+why: The method answers it.
+orientation: A 19th-century pseudo-science reading character from the skull.
 """
 
 
@@ -47,9 +47,9 @@ def test_build_shows_ordered_steps_with_readings_and_gaps(run, monkeypatch, cli_
     assert "Why (AI-generated): The target reads history as class conflict." in out
     assert re.search(r"Read: .*“The Communist Manifesto”, ¶\d+", out)
     assert re.search(r"→ praxis library read [0-9a-f]{8} --start \d+", out)
-    assert "2. Physiocrats  — theory, suggested" in out
-    # No bundled text mentions the Physiocrats.
-    assert "Orientation (AI-generated; nothing in the library on this): French economists" in out
+    assert "2. Phrenology  — theory, suggested" in out
+    # No bundled text mentions phrenology.
+    assert "Orientation (AI-generated; nothing in the library on this): A 19th-century" in out
     assert re.search(r"Learning path [0-9a-f]{8}, 0 of 2 steps dealt with\.", out)
     assert "Next: step 1, Class struggle." in out
     assert re.search(r"Record progress:  praxis path mark [0-9a-f]{8} <step> done\|known\|skip", out)
@@ -64,7 +64,7 @@ def test_known_prerequisites_are_left_out(run, monkeypatch, cli_database):
 
     assert "checked against your reader profile" in out
     assert "Left out, as you said you know: Class struggle" in out
-    assert "1. Physiocrats  — theory, suggested" in out
+    assert "1. Phrenology  — theory, suggested" in out
     assert "already knows: class struggle" in llm.prompts[0].user
 
 
@@ -118,7 +118,7 @@ def test_marking_a_step_done_updates_the_reader_model(run, monkeypatch, cli_data
     assert "Step 1 (Class struggle): done." in result.output
     assert "Your reader model now counts you as knowing Class struggle" in result.output
     assert "1 of 2 steps dealt with." in result.output
-    assert "Next: step 2, Physiocrats." in result.output
+    assert "Next: step 2, Phrenology." in result.output
     profile = run("profile", "show").output
     assert re.search(r"class struggle: introductory", profile)
 
@@ -128,9 +128,9 @@ def test_skipping_does_not_touch_the_reader_model(run, monkeypatch, cli_database
 
     out = run("path", "mark", path, "2", "skip").output
 
-    assert "Step 2 (Physiocrats): skipped." in out
+    assert "Step 2 (Phrenology): skipped." in out
     assert "reader model" not in out
-    assert "physiocrats" not in run("profile", "show").output
+    assert "phrenology" not in run("profile", "show").output
 
 
 def test_show_marks_settled_steps_and_completing_points_onward(run, monkeypatch, cli_database):
@@ -141,7 +141,7 @@ def test_show_marks_settled_steps_and_completing_points_onward(run, monkeypatch,
     assert 'Path complete. On to the topic: praxis recommend "historical materialism"' in last
     out = run("path", "show", path).output
     assert "1. Class struggle  — concept, suggested  ✓ already known" in out
-    assert "2. Physiocrats  — theory, suggested  – skipped" in out
+    assert "2. Phrenology  — theory, suggested  – skipped" in out
     assert "2 of 2 steps dealt with." in out
     assert "model tokens" not in out
 
