@@ -30,7 +30,13 @@ from praxis.news.exploration import ExpandedEvent
 from praxis.news.service import Dashboard, NewsError, NewsRefresh
 from praxis.reader_model import ExplanationDepth, KnowledgeLevel, ReaderProfile
 from praxis.reader_model.events import DocumentRead
-from praxis.reading import AnnotationError, AnnotationResult
+from praxis.reading import (
+    AnnotationError,
+    AnnotationResult,
+    ReadingStatus,
+    RecommendationError,
+    RecommendationResult,
+)
 from praxis.research import ResearchBudget, ResearchError
 from praxis.research.result import ResearchResult
 from praxis.research.situation import ConcreteSituation
@@ -56,7 +62,10 @@ app.add_typer(news_app, name="news")
 application_factory = build_application
 
 # Errors whose message is meant for the user, not a stack trace.
-USER_ERRORS = (AgentError, AnnotationError, LibraryError, NewsError, NewsProviderError, ResearchError, ValueError)
+USER_ERRORS = (
+    AgentError, AnnotationError, LibraryError, NewsError, NewsProviderError,
+    RecommendationError, ResearchError, ValueError,
+)
 
 # Longest stretch of a passage printed by `ask`; the rest is one command away.
 SHOWN_PASSAGE_CHARS = 600
@@ -813,6 +822,70 @@ def library_read(
 
 
 # --- annotations (F06) ----------------------------------------------------------
+
+# --- reading recommendations (F07) -------------------------------------------
+
+
+@app.command("recommend")
+def recommend(
+    topic: Annotated[Optional[str], typer.Argument(help="Topic or question, in quotes. Leave out to use your interests.")] = None,
+) -> None:
+    """Recommend texts from the library to read on a topic, each with why."""
+    with session() as application:
+        profile = application.profiles.get_profile()
+        if topic is None:
+            result = application.recommendations.recommend_next(profile)
+        else:
+            result = application.recommendations.recommend_readings(topic, profile)
+    _print_recommendations(result, from_interests=topic is None)
+
+
+_STATUS_LINES = {
+    ReadingStatus.UNREAD: "You have not opened it yet.",
+    ReadingStatus.COMPLETED: "You have finished it.",
+}
+
+
+def _print_recommendations(result: RecommendationResult, from_interests: bool = False) -> None:
+    subject = f"your interests ({result.topic})" if from_interests else result.topic
+    how = "ranked by AI" if result.ranked_by_model else "ranked by matching passages"
+    if result.personalized:
+        how += ", adapted to your reader profile"
+    if result.recommendations:
+        typer.secho(f"Readings on {subject}  ({how})", bold=True)
+    for number, item in enumerate(result.recommendations, start=1):
+        document = item.document
+        year = f" ({document.publication_date.year})" if document.publication_date else ""
+        difficulty = f"  [{item.difficulty}]" if item.difficulty else ""
+        typer.secho(f"\n{number}. {document.title}{year} — {document.author}{difficulty}", fg=typer.colors.CYAN)
+        label = "Why (AI-generated): " if result.ranked_by_model else "Why: "
+        for line in textwrap.wrap(label + item.reason, width=84):
+            typer.echo(f"   {line}")
+        if item.status is ReadingStatus.IN_PROGRESS:
+            typer.echo(f"   You have read {item.progress:.0%} of it.")
+        elif item.status in _STATUS_LINES:
+            typer.echo(f"   {_STATUS_LINES[item.status]}")
+        if item.passages:
+            typer.echo(f"   The topic comes up in: {', '.join(c.locator for c in item.passages)}")
+        start = item.passages[0].locator.lstrip("¶") if item.passages else "1"
+        typer.echo(f"   → praxis library read {_short_id(document)} --start {start}")
+    if result.external:
+        typer.secho("\nNot in the library (named by the AI, not checked)", bold=True)
+        for suggestion in result.external:
+            author = f" — {suggestion.author}" if suggestion.author else ""
+            for n, line in enumerate(textwrap.wrap(f"- {suggestion.title}{author}: {suggestion.reason}", width=86)):
+                typer.echo(("  " if n else "") + line)
+    if result.passed_over:
+        typer.echo(
+            f"\n{result.passed_over} other matching text{'s were' if result.passed_over != 1 else ' was'} not recommended."
+        )
+    if result.recommendations:
+        first = _short_id(result.recommendations[0].document)
+        typer.echo(f"\nKeep one in your workspace:  praxis workspace save-text {first}")
+    elif not result.external:
+        typer.echo("No readings to recommend.")
+    _print_warnings(result.warnings, result.tokens_used)
+
 
 ANNOTATION_TYPES = ", ".join(t.value.replace("_", "-") for t in AnnotationType)
 

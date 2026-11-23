@@ -35,7 +35,7 @@ from praxis.persistence.research import SQLResearchRepository
 from praxis.reader_model.events import LearningEventBus
 from praxis.reader_model.service import ReaderProfileService
 from praxis.reader_model.updater import ReaderModelUpdater
-from praxis.reading import AnnotationService
+from praxis.reading import AnnotationService, RecommendationService
 from praxis.tools import ToolFactory, ToolManager
 from praxis.workspace.service import WorkspaceService
 
@@ -50,6 +50,7 @@ class Application:
     workspace: WorkspaceService
     agent: PoliticalResearchAgent
     annotations: AnnotationService
+    recommendations: RecommendationService
     news: NewsService
     # False when the caller passed in a database it will close itself.
     owns_database: bool = True
@@ -99,6 +100,7 @@ def build_application(
         annotations=AnnotationService(
             tools, llm, repository=SQLAnnotationRepository(database)
         ),
+        recommendations=RecommendationService(tools, llm),
         news=NewsService(
             news_providers if news_providers is not None
             else [RSSNewsAdapter(feed) for feed in read_feeds()],
