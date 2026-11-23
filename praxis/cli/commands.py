@@ -135,6 +135,18 @@ def _print_documents(documents: list[Document], empty_message: str) -> None:
             typer.echo(f"          topics: {', '.join(document.topics)}")
 
 
+# --- graphical interface ----------------------------------------------------
+
+
+@app.command("gui")
+def gui() -> None:
+    """Open the graphical interface."""
+    # Imported here so the CLI works even where PySide6 is not installed.
+    from praxis.gui.launch import run
+
+    raise typer.Exit(code=run([]))
+
+
 # --- questions (F04) ---------------------------------------------------------
 
 

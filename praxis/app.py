@@ -60,6 +60,8 @@ class Application:
     prerequisites: PrerequisiteService
     traditions: IdeologicalContextService
     news: NewsService
+    # The model the agent and services use, or None if none is configured.
+    llm: LLMClient | None = None
     # False when the caller passed in a database it will close itself.
     owns_database: bool = True
     _closed: bool = field(default=False, repr=False)
@@ -121,6 +123,7 @@ def build_application(
             events=SQLEventRepository(database, documents),
             explorer=EventExplorer(documents, llm),
         ),
+        llm=llm,
         owns_database=owns_database,
     )
 

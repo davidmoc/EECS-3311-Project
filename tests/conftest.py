@@ -84,3 +84,41 @@ def library_database():
     ))
     yield database
     database.close()
+
+
+# --- shared by the GUI tests ---------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def qt_app():
+    """One QApplication for every GUI test, drawing to no screen."""
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture
+def gui(qt_app):
+    """Build the GUI window on an in-memory database. ``gui()`` has no
+    model; ``gui(llm)`` uses a scripted one. Requests run inline."""
+    from praxis.gui.launch import build_window
+    from praxis.gui.tasks import InlineTaskRunner
+
+    built = []
+
+    def make(llm=None, seed=False):
+        database = Database()
+        application = app_module.build_application(Settings(openai_api_key=None), database, llm)
+        if seed:
+            app_module.bundled_library_service(application).import_catalogue()
+        window = build_window(application, InlineTaskRunner())
+        built.append((window, database))
+        return window, application
+
+    yield make
+    for window, database in built:
+        window.close()
+        database.close()
