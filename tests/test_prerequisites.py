@@ -242,3 +242,14 @@ def test_a_passage_is_offered_by_one_step_only(library_database):
 
     first, second = (set(c.locator for c in s.readings if "Revolution" in c.document_title) for s in path.steps)
     assert first and not first & second
+
+
+def test_a_leading_article_does_not_stop_a_known_topic_matching(library_database):
+    # Two live paths named the same prerequisite "Labour theory of value"
+    # and "The labour theory of value".
+    profile = reader_who_knows("labour theory of value")
+    llm = ScriptedLLM("prerequisite: The labour theory of value | theory | essential\nprerequisite: Rent | concept | essential")
+    path = service(library_database, llm).build_learning_path("the rate of profit", profile)
+
+    assert path.already_known == ("The labour theory of value",)
+    assert [s.name for s in path.steps] == ["Rent"]

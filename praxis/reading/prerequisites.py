@@ -22,7 +22,7 @@ from uuid import UUID, uuid4
 from praxis.agent.prompts import MAX_PREREQUISITES, PREREQUISITE_KINDS, PromptBuilder
 from praxis.documents import Citation, Document, NewsArticle
 from praxis.llm import LLMClient, LLMError
-from praxis.reader_model import KnowledgeLevel, ReaderProfile, normalize_topic
+from praxis.reader_model import KnowledgeArea, KnowledgeLevel, ReaderProfile, normalize_topic
 from praxis.tools import ToolManager
 
 if TYPE_CHECKING:  # praxis.persistence.learning_paths imports this module
@@ -274,7 +274,7 @@ class PrerequisiteService:
         for prerequisite in prerequisites:
             step = LearningStep(prerequisite, required=assessed and prerequisite.essential)
             if uses_profile:
-                area = profile.knowledge.areas.get(normalize_topic(prerequisite.name))
+                area = known_area(profile, prerequisite.name)
                 if area is not None and area.level >= KnowledgeLevel.INTRODUCTORY:
                     if not area.is_inferred:
                         already_known.append(prerequisite.name)
@@ -345,6 +345,24 @@ class PrerequisiteService:
             if match not in chosen:
                 chosen.append(match)
         return tuple(match.document.cite(match.passage) for match in chosen)
+
+
+_LEADING_ARTICLE = re.compile(r"^(?:the|a|an)\s+")
+
+
+def topic_key(name: str) -> str:
+    """A topic name for matching: normalized, without a leading article,
+    so "The labour theory of value" matches "labour theory of value"."""
+    return _LEADING_ARTICLE.sub("", normalize_topic(name))
+
+
+def known_area(profile: ReaderProfile, name: str) -> KnowledgeArea | None:
+    """The reader's knowledge area for ``name``, matched by ``topic_key``."""
+    wanted = topic_key(name)
+    return next(
+        (area for key, area in profile.knowledge.areas.items() if topic_key(key) == wanted),
+        None,
+    )
 
 
 def describe_text(document: Document) -> str:
