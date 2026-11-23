@@ -109,9 +109,13 @@ def gui(qt_app):
 
     built = []
 
-    def make(llm=None, seed=False):
+    def make(llm=None, seed=False, news=()):
+        """``news`` are the news providers; none by default, so no test
+        reaches the real feeds."""
         database = Database()
-        application = app_module.build_application(Settings(openai_api_key=None), database, llm)
+        application = app_module.build_application(
+            Settings(openai_api_key=None), database, llm, news_providers=list(news)
+        )
         if seed:
             app_module.bundled_library_service(application).import_catalogue()
         window = build_window(application, InlineTaskRunner())

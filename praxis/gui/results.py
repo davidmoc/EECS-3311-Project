@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from praxis.agent import AgentResponse, ResponseStatus
 from praxis.comparison import Comparability, SourceComparison
+from praxis.news.events import Event, Grouping, SummaryStatus
+from praxis.news.exploration import ExpandedEvent
 from praxis.gui.render import SHOWN_PASSAGE_CHARS, ai_heading, ai_text, escape, join, labels, line, read_link, sources, warnings
 from praxis.reading import LearningPath, ReadingStatus, RecommendationResult
 from praxis.reading.prerequisites import StepStatus
@@ -338,4 +340,67 @@ def comparison(result: SourceComparison) -> str:
     if result.uncertainties:
         parts.append("**Could not be verified from these passages**\n\n" + "\n".join(line(u) for u in result.uncertainties))
     parts.append(warnings(result.warnings, result.tokens_used))
+    return join(*parts)
+
+
+def event_card(event: Event) -> str:
+    """F01: one dashboard event, as plain text for the event list."""
+    details = [event.last_date.isoformat() if event.last_date else "undated"]
+    if event.categories:
+        details.append(", ".join(event.categories))
+    outlets = event.outlets
+    details.append(f"{len(outlets)} outlet{'s' if len(outlets) != 1 else ''}: {', '.join(outlets)}")
+    rows = [event.headline, " · ".join(details)]
+    if event.grouping is Grouping.SINGLE_REPORT:
+        rows.append("Single report: no other outlet in the feeds has reported it.")
+    elif event.grouping is Grouping.UNCERTAIN:
+        rows.append("Grouping uncertain: these reports may not all be about one event.")
+    if event.is_summarized:
+        rows.append("Summary (AI-generated from the reports): " + event.summary)
+    elif event.summary_status is SummaryStatus.HEADLINES_ONLY:
+        rows.append("No summary is shown; read the reports.")
+    if event.note:
+        rows.append(event.note)
+    return "\n".join(rows)
+
+
+def expanded_event(expanded: ExpandedEvent) -> str:
+    """F02: the reports, background from the library, and an AI account."""
+    event = expanded.event
+    parts = [f"## {escape(event.headline)}"]
+    details = []
+    if event.first_date and event.last_date and event.first_date != event.last_date:
+        details.append(f"{event.first_date.isoformat()} to {event.last_date.isoformat()}")
+    elif event.last_date:
+        details.append(event.last_date.isoformat())
+    if event.categories:
+        details.append(", ".join(event.categories))
+    details.append(f"{len(event.outlets)} outlet{'s' if len(event.outlets) != 1 else ''}")
+    parts.append(escape(" · ".join(details)))
+    if expanded.developing:
+        parts.append("> **Still developing:** the reports are recent and may change.")
+    if event.grouping is Grouping.UNCERTAIN:
+        parts.append("> **Grouping uncertain:** these reports may not all be about one event.")
+    if event.note:
+        parts.append(f"> {escape(event.note)}")
+    rows = ["### Reports"]
+    for source, report in zip(expanded.report_sources, event.reports):
+        when = report.publication_date.isoformat() if report.publication_date else "undated"
+        row = f"**{escape(source.label)}** {escape(f'{report.outlet}, {when}: {report.title}')}"
+        if source.citation.quoted_text != report.title:
+            row += "\n\n> " + escape(source.citation.quoted_text).replace("\n\n", "\n>\n> ")
+        if report.source_url:
+            row += f"\n\n[{escape(report.source_url)}]({report.source_url})"
+        rows.append(row)
+    parts.append("\n\n".join(rows))
+    parts.append(sources(expanded.library_sources, expanded.cited, heading="Background passages from the library"))
+    if expanded.account:
+        parts.append(ai_text("Account of the event", expanded.account, False))
+    if expanded.open_questions:
+        parts.append("### Open questions (AI-generated)\n\n" + "\n".join(line(q) for q in expanded.open_questions))
+    if expanded.related:
+        parts.append("### Other reports that may be related (not grouped with this event)\n\n" + "\n".join(
+            line(f"{r.outlet}: {r.title}") for r in expanded.related
+        ))
+    parts.append(warnings(expanded.warnings, expanded.tokens_used))
     return join(*parts)

@@ -11,6 +11,7 @@ from praxis.config import load_settings
 from praxis.gui.home import HomeController, HomeView
 from praxis.gui.library import LibraryController, LibraryView, ReadingController
 from praxis.gui.main_window import MainWindow
+from praxis.gui.news import NewsController, NewsView
 from praxis.gui.paths import PathsController, PathsView
 from praxis.gui.profile import ProfileController, ProfileView
 from praxis.gui.research import ResearchController, ResearchView
@@ -29,6 +30,7 @@ def build_window(application: Application, runner: TaskRunner) -> MainWindow:
     def open_reading(document_id: str, paragraph: int) -> None:
         window.show_page("Library").open_text(document_id, paragraph)
 
+    window.add_page("News", NewsView(NewsController(application), runner, open_reading))
     window.add_page("Research", ResearchView(ResearchController(application), runner, open_reading))
     window.add_page("Past research", SessionsView(SessionsController(application), runner, open_reading))
     window.add_page("Learning paths", PathsView(PathsController(application), runner, open_reading))
