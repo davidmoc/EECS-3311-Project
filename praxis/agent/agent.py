@@ -27,6 +27,7 @@ from praxis.documents import Document, NewsArticle
 from praxis.news.events import Event
 from praxis.news.exploration import report_passage
 from praxis.llm import LLMClient, LLMError
+from praxis.reader_model.personalization import PersonalizationService, RequestPreferences
 from praxis.reader_model.service import ReaderProfileService
 from praxis.research.assessment import ResearchAssessment
 from praxis.research.analysis import (
@@ -194,6 +195,7 @@ class PoliticalResearchAgent:
         ``comparison_repository``, comparisons are not stored."""
         self._tools = tools
         self._profiles = profiles
+        self._personalization = PersonalizationService(profiles)
         self._llm = llm
         self._prompts = prompts or PromptBuilder()
         self._planner = planner or ResearchPlanner(llm, self._prompts)
@@ -210,12 +212,14 @@ class PoliticalResearchAgent:
         objective: str,
         budget: ResearchBudget | None = None,
         reports: tuple[NewsArticle, ...] = (),
+        preferences: RequestPreferences | None = None,
     ) -> ResearchResult:
         """Plan, retrieve step by step within ``budget``, then synthesise.
 
         ``reports`` are news reports the research starts from: they become
         the first sources, before anything is searched (SD03's
-        ``research(event)``).
+        ``research(event)``). ``preferences`` override the reader's
+        explanation depth or personalization for this request (F14).
 
         Never fabricates: with no sources, no analysis is written; if the
         model is missing or fails, the gathered sources are still returned.
@@ -223,7 +227,7 @@ class PoliticalResearchAgent:
         if not objective.strip():
             raise AgentError("Enter a research question first.")
         session = ResearchSession(objective)
-        profile = self._profiles.get_profile()
+        profile = self._personalization.profile_for(preferences)
         plan = self._planner.create_initial_plan(session, profile)
         context = ResearchContext(session, self._tools, profile=profile)
         if reports:
@@ -245,7 +249,11 @@ class PoliticalResearchAgent:
         return self.research(EVENT_QUESTION.format(headline=event.headline), budget, event.reports)
 
     def continue_research(
-        self, session_id: UUID, focus: str | None = None, budget: ResearchBudget | None = None
+        self,
+        session_id: UUID,
+        focus: str | None = None,
+        budget: ResearchBudget | None = None,
+        preferences: RequestPreferences | None = None,
     ) -> ResearchResult:
         """Run another round of a stored research session (Stage 1's
         ``continueResearch(sessionId, request)``).
@@ -265,7 +273,7 @@ class PoliticalResearchAgent:
 
         session = previous.session
         session.resume()
-        profile = self._profiles.get_profile()
+        profile = self._personalization.profile_for(preferences)
         context = ResearchContext(
             session, self._tools, _restore_corpus(previous), profile,
             max_sources=len(previous.sources) + SOURCES_PER_CONTINUATION,
@@ -489,6 +497,7 @@ class PoliticalResearchAgent:
         topic: str,
         allow_broad: bool = False,
         reports: tuple[NewsArticle, ...] = (),
+        preferences: RequestPreferences | None = None,
     ) -> HistoricalContext:
         """How ``topic`` developed, organised from library passages (UC09).
 
@@ -502,7 +511,7 @@ class PoliticalResearchAgent:
         topic = " ".join(topic.split())
         if not topic:
             raise AgentError("Name a topic, event or period to trace.")
-        profile = self._profiles.get_profile()
+        profile = self._personalization.profile_for(preferences)
         usage = _Usage()
         warnings: list[str] = []
 
@@ -613,7 +622,12 @@ class PoliticalResearchAgent:
 
     # --- F11: Marxist theoretical analysis -----------------------------------
 
-    def analyze(self, issue: str, framework: str | None = None) -> MaterialistAnalysis:
+    def analyze(
+        self,
+        issue: str,
+        framework: str | None = None,
+        preferences: RequestPreferences | None = None,
+    ) -> MaterialistAnalysis:
         """A Marxist analysis of ``issue`` from library passages (UC11).
 
         Evidence is searched for first; the model then names the concepts
@@ -624,7 +638,7 @@ class PoliticalResearchAgent:
         issue = " ".join(issue.split())
         if not issue:
             raise AgentError("Name an issue, event or question to analyse.")
-        profile = self._profiles.get_profile()
+        profile = self._personalization.profile_for(preferences)
         usage = _Usage()
         context = ResearchContext(
             ResearchSession(issue), self._tools, profile=profile, library_only=True
@@ -635,7 +649,10 @@ class PoliticalResearchAgent:
         return self._analyse(issue, framework, context, usage)
 
     def analyze_research(
-        self, session_id: UUID, framework: str | None = None
+        self,
+        session_id: UUID,
+        framework: str | None = None,
+        preferences: RequestPreferences | None = None,
     ) -> MaterialistAnalysis:
         """UC11 "reached as part of a broader research session": the
         session's sources are the evidence, and its findings are offered to
@@ -644,7 +661,7 @@ class PoliticalResearchAgent:
         corpus = _restore_corpus(research)
         context = ResearchContext(
             ResearchSession(research.objective), self._tools, corpus,
-            self._profiles.get_profile(),
+            self._personalization.profile_for(preferences),
             max_sources=len(corpus) + MAX_ANALYSIS_CONCEPTS * PASSAGES_PER_STEP,
             purposes=dict(research.purposes), library_only=True,
         )
@@ -907,12 +924,17 @@ class PoliticalResearchAgent:
 
     # --- F04: source-first question answering ------------------------------
 
-    def answer_question(self, question: str) -> AgentResponse:
+    def answer_question(
+        self, question: str, preferences: RequestPreferences | None = None
+    ) -> AgentResponse:
+        """Passages that address ``question``, then an explanation that
+        cites them (F04). ``preferences`` override the reader's explanation
+        depth or personalization for this request (F14)."""
         question = question.strip()
         if not question:
             raise AgentError("Ask a question first.")
 
-        profile = self._profiles.get_profile()
+        profile = self._personalization.profile_for(preferences)
         usage = _Usage()
         warnings: list[str] = []
 

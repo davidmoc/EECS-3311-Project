@@ -12,7 +12,8 @@ from praxis.agent import (
 from praxis.documents import Book
 from praxis.llm import LLMClient, LLMError, LLMResponse
 from praxis.persistence import Database, SQLDocumentRepository, SQLReaderProfileRepository
-from praxis.reader_model import KnowledgeLevel
+from praxis.reader_model import ExplanationDepth, KnowledgeLevel
+from praxis.reader_model.personalization import RequestPreferences
 from praxis.reader_model.service import ReaderProfileService
 from praxis.tools import PassageSearchTool, Tool, ToolManager, ToolResult
 
@@ -240,3 +241,21 @@ def test_question_tops_up_when_keywords_find_too_little(database, profiles):
 
     assert tools.call_count == 2
     assert {s.citation.locator for s in response.sources} == {"¶1", "¶2"}
+
+
+def test_one_request_can_ask_for_less_detail_or_stay_general(database, profiles):
+    # F14: "The user can override the level of detail" and "disable or
+    # override personalization", for one request; the profile is unchanged.
+    profiles.correct_knowledge_assessment("political economy", KnowledgeLevel.ADVANCED)
+    llm = FakeLLM("wage", "Explained [1].", "wage", "Explained [1].")
+    agent = make_agent(database, profiles, llm)
+
+    brief = agent.answer_question("wages?", RequestPreferences(depth=ExplanationDepth.BRIEF))
+    general = agent.answer_question("wages?", RequestPreferences(personalized=False))
+
+    assert "two or three sentences" in llm.prompts[1].system
+    assert brief.personalized
+    assert not general.personalized
+    assert "About the reader" not in llm.prompts[3].system
+    stored = profiles.get_profile()
+    assert stored.explanation_depth is ExplanationDepth.STANDARD and stored.personalization_enabled
