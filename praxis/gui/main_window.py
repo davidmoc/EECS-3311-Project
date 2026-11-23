@@ -32,7 +32,8 @@ class MainWindow(QMainWindow):
         self._navigation = QListWidget()
         self._navigation.setFixedWidth(190)
         self._stack = QStackedWidget()
-        self._navigation.currentRowChanged.connect(self._stack.setCurrentIndex)
+        self._runner = runner
+        self._navigation.currentRowChanged.connect(self._switch_to)
 
         central = QWidget()
         layout = QHBoxLayout(central)
@@ -47,6 +48,15 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self._progress)
         runner.status.connect(self.statusBar().showMessage)
         runner.busy_changed.connect(self._progress.setVisible)
+
+    def _switch_to(self, row: int) -> None:
+        """Show page ``row``, brought up to date: another page may have
+        changed what it shows (loading the library, saving an item). Not
+        while a request runs, since refreshing reads the database."""
+        self._stack.setCurrentIndex(row)
+        page = self._stack.widget(row)
+        if hasattr(page, "refresh") and not self._runner.busy:
+            page.refresh()
 
     def add_page(self, title: str, page: QWidget) -> None:
         self._pages[title] = page

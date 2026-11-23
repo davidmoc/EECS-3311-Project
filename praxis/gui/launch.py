@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication
 from praxis.app import Application, build_application
 from praxis.config import load_settings
 from praxis.gui.home import HomeController, HomeView
+from praxis.gui.library import LibraryController, LibraryView, ReadingController
 from praxis.gui.main_window import MainWindow
 from praxis.gui.tasks import TaskRunner, ThreadTaskRunner
 from praxis.persistence import Database
@@ -18,6 +19,9 @@ def build_window(application: Application, runner: TaskRunner) -> MainWindow:
     """The window with every page, each View given its Controller."""
     window = MainWindow(runner)
     window.add_page("Home", HomeView(HomeController(application), runner))
+    window.add_page("Library", LibraryView(
+        LibraryController(application), ReadingController(application), runner
+    ))
     return window
 
 
