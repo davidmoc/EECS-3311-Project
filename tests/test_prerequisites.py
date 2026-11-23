@@ -230,3 +230,15 @@ def test_a_target_text_is_named_without_its_catalogue_topics(library_database):
     service(library_database, llm).build_learning_path("", document=manifesto)
 
     assert "communism" not in llm.prompts[0].user
+
+
+def test_a_passage_is_offered_by_one_step_only(library_database):
+    # A live run offered the same paragraph for two neighbouring events.
+    reply = (
+        "prerequisite: The 1848 revolutions | event | essential\nsearch: 1848 revolution Paris\n"
+        "prerequisite: The German revolution | event | essential\nsearch: 1848 revolution Germany\n"
+    )
+    path = service(library_database, ScriptedLLM(reply)).build_learning_path("the Brumaire")
+
+    first, second = (set(c.locator for c in s.readings if "Revolution" in c.document_title) for s in path.steps)
+    assert first and not first & second

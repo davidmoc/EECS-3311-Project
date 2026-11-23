@@ -206,6 +206,7 @@ class PrerequisiteService:
 
         steps: list[LearningStep] = []
         already_known: list[str] = []
+        offered: set[tuple[UUID, str]] = set()  # passages earlier steps already offer
         for prerequisite in prerequisites:
             step = LearningStep(prerequisite, required=assessed and prerequisite.essential)
             if uses_profile:
@@ -220,7 +221,8 @@ class PrerequisiteService:
                         f"You may already know this: your reading suggests "
                         f"{area.level.name.lower()} level."
                     )
-            step.readings = self._find_readings(prerequisite, document, warnings)
+            step.readings = self._find_readings(prerequisite, document, offered, warnings)
+            offered.update((c.document_id, c.locator) for c in step.readings)
             steps.append(step)
 
         gaps = [step.name for step in steps if step.is_gap]
@@ -241,10 +243,15 @@ class PrerequisiteService:
         )
 
     def _find_readings(
-        self, prerequisite: Prerequisite, target: Document | None, warnings: list[str]
+        self,
+        prerequisite: Prerequisite,
+        target: Document | None,
+        offered: set[tuple[UUID, str]],
+        warnings: list[str],
     ) -> tuple[Citation, ...]:
         """Up to ``READINGS_PER_STEP`` passages, from different texts where
-        possible, never from the target text or the news."""
+        possible, never from the target text or the news, and none that an
+        earlier step already offers."""
         query = f"{prerequisite.name} {prerequisite.search}".strip()
         result = self._tools.execute_tool(PASSAGE_SEARCH, {"query": query, "limit": SEARCH_LIMIT})
         if not result.success:
@@ -254,6 +261,7 @@ class PrerequisiteService:
             match for match in result.items
             if match.document.kind != NewsArticle.kind
             and (target is None or match.document.id != target.id)
+            and (match.document.id, match.passage.locator) not in offered
         ]
         # One passage per text first, then fill with the best remaining.
         chosen, seen = [], set()
