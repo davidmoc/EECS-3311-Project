@@ -29,13 +29,14 @@ from praxis.news.events import Event, Grouping, SummaryStatus
 from praxis.news.exploration import ExpandedEvent
 from praxis.news.service import Dashboard, NewsError, NewsRefresh
 from praxis.reader_model import ExplanationDepth, KnowledgeLevel, ReaderProfile
-from praxis.reader_model.events import DocumentRead
+from praxis.reader_model.events import DocumentRead, PrerequisiteMarkedKnown
 from praxis.reading import (
     AnnotationError,
     AnnotationResult,
     LearningPath,
     PrerequisiteError,
     ReadingStatus,
+    StepStatus,
     RecommendationError,
     RecommendationResult,
 )
@@ -912,7 +913,85 @@ def path_build(
     _print_learning_path(path)
 
 
-def _print_learning_path(path: LearningPath) -> None:
+@path_app.command("list")
+def path_list(
+    limit: Annotated[int, typer.Option(min=1, help="How many paths to list.")] = 20,
+) -> None:
+    """List your learning paths, most recently changed first."""
+    with session() as application:
+        paths = application.prerequisites.list_paths(limit)
+    if not paths:
+        typer.echo('No learning paths yet. Build one with: praxis path build "..."')
+        return
+    for summary in paths:
+        when = summary.updated_at.astimezone().strftime("%Y-%m-%d %H:%M")
+        progress = f"{summary.settled_count}/{summary.step_count} steps"
+        typer.echo(f"{str(summary.id)[:8]}  {when}  {progress:>11}  {summary.target}")
+
+
+@path_app.command("show")
+def path_show(
+    path_id: Annotated[str, typer.Argument(help="Path id (prefix from `path list`).")],
+) -> None:
+    """Show a learning path and how far you are through it."""
+    with session() as application:
+        prerequisites = application.prerequisites
+        path = prerequisites.get_path(prerequisites.find_path(path_id))
+    _print_learning_path(path, stored=True)
+
+
+_STEP_STATUSES = {
+    "done": StepStatus.DONE,
+    "known": StepStatus.KNOWN,
+    "skip": StepStatus.SKIPPED,
+    "skipped": StepStatus.SKIPPED,
+    "todo": StepStatus.TODO,
+}
+
+
+@path_app.command("mark")
+def path_mark(
+    path_id: Annotated[str, typer.Argument(help="Path id (prefix from `path list`).")],
+    step: Annotated[int, typer.Argument(min=1, help="Step number.")],
+    status: Annotated[str, typer.Argument(help="done, known (you already understood it), skip, or todo.")],
+) -> None:
+    """Record progress on a step. Done and known steps update your reader model."""
+    chosen = _STEP_STATUSES.get(status.strip().lower())
+    if chosen is None:
+        _fail(f"Unknown status '{status}'. Use done, known, skip or todo.")
+    with session() as application:
+        prerequisites = application.prerequisites
+        path = prerequisites.set_step_status(prerequisites.find_path(path_id), step, chosen)
+        name = path.steps[step - 1].name
+        if chosen in (StepStatus.DONE, StepStatus.KNOWN):
+            application.events.publish(PrerequisiteMarkedKnown(name))
+    typer.echo(f"Step {step} ({name}): {chosen.value}.")
+    if chosen in (StepStatus.DONE, StepStatus.KNOWN):
+        typer.echo(f"Your reader model now counts you as knowing {name} (at least introductory).")
+    typer.echo(f"{path.settled_count} of {len(path.steps)} steps dealt with.")
+    _print_next_step(path)
+
+
+def _print_next_step(path: LearningPath) -> None:
+    upcoming = path.next_step
+    if upcoming is None:
+        if path.target_document_id is not None:
+            typer.echo(f"Path complete. On to the text: praxis library read {str(path.target_document_id)[:8]}")
+        else:
+            typer.echo(f'Path complete. On to the topic: praxis recommend "{path.target}"')
+        return
+    number, step = upcoming
+    typer.echo(f"Next: step {number}, {step.name}.")
+
+
+_STATUS_MARKS = {
+    StepStatus.DONE: "  ✓ done",
+    StepStatus.KNOWN: "  ✓ already known",
+    StepStatus.SKIPPED: "  – skipped",
+}
+
+
+def _print_learning_path(path: LearningPath, stored: bool = False) -> None:
     how = "prerequisites identified by AI"
     if path.personalized:
         how += ", checked against your reader profile"
@@ -930,7 +1009,8 @@ def _print_learning_path(path: LearningPath) -> None:
     for number, step in enumerate(path.steps, start=1):
         prerequisite = step.prerequisite
         need = "needed" if step.required else "suggested"
-        typer.secho(f"\n{number}. {step.name}  — {prerequisite.kind}, {need}", fg=typer.colors.CYAN)
+        mark = _STATUS_MARKS.get(step.status, "")
+        typer.secho(f"\n{number}. {step.name}  — {prerequisite.kind}, {need}{mark}", fg=typer.colors.CYAN)
         if prerequisite.why:
             for line in textwrap.wrap(f"Why (AI-generated): {prerequisite.why}", width=84):
                 typer.echo(f"   {line}")
@@ -949,8 +1029,16 @@ def _print_learning_path(path: LearningPath) -> None:
             label = "Orientation (AI-generated; nothing in the library on this): "
             for line in textwrap.wrap(label + prerequisite.orientation, width=84):
                 typer.echo(f"   {line}")
-    typer.echo('\nAlready understand a step?  praxis profile know "<name>" introductory')
-    _print_warnings(path.warnings, path.tokens_used)
+    typer.echo()
+    if stored or not any(w.startswith("The learning path could not be stored") for w in path.warnings):
+        short = str(path.id)[:8]
+        typer.echo(f"Learning path {short}, {path.settled_count} of {len(path.steps)} steps dealt with.")
+        _print_next_step(path)
+        typer.echo(f"  Record progress:  praxis path mark {short} <step> done|known|skip")
+    else:
+        typer.echo('Already understand a step?  praxis profile know "<name>" introductory')
+    if not stored:
+        _print_warnings(path.warnings, path.tokens_used)
 
 
 ANNOTATION_TYPES = ", ".join(t.value.replace("_", "-") for t in AnnotationType)
