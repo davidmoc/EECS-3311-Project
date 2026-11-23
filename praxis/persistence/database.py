@@ -121,10 +121,16 @@ CREATE TABLE IF NOT EXISTS news_events (
 
 
 class Database:
-    def __init__(self, path: Path | str = ":memory:") -> None:
+    def __init__(self, path: Path | str = ":memory:", shared_with_worker: bool = False) -> None:
+        """``shared_with_worker`` lets the connection be used from a thread
+        other than the one that opened it. The GUI needs this: it runs slow
+        requests on a worker thread so the window stays responsive. SQLite
+        connections are not safe to use from two threads at once, so the
+        GUI runs one request at a time and leaves the database alone while
+        it runs (``praxis.gui.tasks``)."""
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(str(path))
+        self.connection = sqlite3.connect(str(path), check_same_thread=not shared_with_worker)
         self.connection.row_factory = sqlite3.Row
         self.connection.executescript(SCHEMA)
 
