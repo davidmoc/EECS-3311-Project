@@ -97,6 +97,9 @@ python -m praxis recommend                     # from your strongest interests
 # Learning paths (F08): the background a topic or text assumes
 python -m praxis path build "surplus value"
 python -m praxis path build --text b67c02e1     # for a library text
+python -m praxis path list                       # every path is stored
+python -m praxis path mark 30a812b3 1 done       # or known, skip, todo
+python -m praxis path show 30a812b3
 
 # Source and framing comparison (F10): two to four texts, on one subject
 python -m praxis compare b67c02e1 abdc2552 --on "the peasantry"
@@ -222,7 +225,11 @@ passages, never from the target text and never repeated across steps; a
 step the library has nothing on gets a short AI orientation and is
 reported as a gap. Steps are "needed" only when the model calls them
 essential and your knowledge is on record; knowledge inferred from your
-reading turns a step into a suggestion rather than dropping it.
+reading turns a step into a suggestion rather than dropping it. Paths
+are stored; `path mark` records each step as done, already known or
+skipped. Done and known steps are published to the reader model, which
+records the topic as known at introductory level, so later paths leave it
+out.
 
 Reading with `library read` updates your reading progress, interests and
 inferred knowledge automatically; `profile know` always overrides inference.

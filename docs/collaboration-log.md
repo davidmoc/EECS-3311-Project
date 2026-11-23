@@ -334,3 +334,21 @@ platform.openai.com.
   - `LearningPath` has an id, a creation time and a status per step, ready to be stored; storing paths and recording progress (UC08 steps 7–8) is the next slice. Until then the command points to `profile know` for steps the reader already understands.
 - **Human contribution:** None on this slice yet; the code has not been reviewed.
 - **Outcome:** Five code commits and this documentation commit.
+
+### 2026-11-22 — Prerequisite-guided learning, second slice: stored paths and progress (F08)
+
+- **Task:** UC08 steps 7–8 and its postcondition ("progress can be retained"): keep learning paths, let the reader mark steps done, already known or skipped, and update the reader model.
+- **Input/Instruction:** Third of the five slices requested.
+- **AI contribution:** Moved the JSON encoding of citations into `praxis/persistence/citations.py`, shared by annotation, source and path storage. Added a `learning_paths` table, `LearningPathRepository` with `SQLLearningPathRepository` and `LearningPathSummary`, `LearningPath.settled_count` and `next_step`, and in `PrerequisiteService` `get_path`, `list_paths`, `find_path` and `set_step_status`. In the CLI: `path list`, `path show` and `path mark <id> <step> done|known|skip|todo`. `path build` now prints the path's id and next step. 648 automated tests. Live runs against `gpt-5-mini` on the scratch database:
+  - `path build "surplus value"` (35 s, 2,678 tokens): commodity, the labour theory of value, labour-power and wages, capital, and circulation, in that order. Marking step 1 known and step 3 done added "commodity" and "labour-power and wages" to the reader model as stated knowledge at introductory level. Skipping step 5 left the model alone. `path list` showed 3/5 steps, and `path show` marked each settled step.
+  - `path build "the falling rate of profit"` (33 s, 2,598 tokens): six steps. None matched a topic the reader had marked, so nothing was left out.
+- **Problems met:**
+  - The two live paths named the same step "Labour theory of value" and "The labour theory of value"; matching on the exact name would not have recognised it as known. Known topics are now matched without a leading article (`89e4565`). Regression test confirmed to fail before the fix.
+  - Most readings for the economic steps are weak, because the library has no economic text such as *Capital*: ¶274 of *Revolution and Counter-Revolution* (on insurrection) was offered for the labour theory of value, and ¶144 of the Manifesto (free education) for circulation. ¶84 of the Manifesto (the minimum wage) and ¶80 ("To be a capitalist…") fit. Not changed; importing more texts is the remedy.
+- **Design changes from Stage 1 introduced here:**
+  - Stage 1 gives `LearningPath` no storage. Paths are stored whole as JSON, with the text of each reading, as research and comparisons are. A path with no steps (nothing to learn) is not stored. A failure to store becomes a warning, and the command then falls back to the `profile know` hint.
+  - UC08 step 7 ("marks or demonstrates completion") is marking only: done, already known, skipped, or back to do. There is no test of understanding.
+  - UC08 step 8 goes through the Observer pair as SD07 shows: the `path mark` controller publishes `PrerequisiteMarkedKnown` for done and known steps, and `ReaderModelUpdater` records the topic as stated knowledge at introductory level (never lowering a higher level). `PrerequisiteService` does not touch the reader model itself. Skipping publishes nothing, since skipping is not knowing.
+  - When every step is dealt with, the command points on to the target text, or to `recommend` for a topic.
+- **Human contribution:** None on this slice yet; the code has not been reviewed.
+- **Outcome:** Five code commits and this documentation commit.
