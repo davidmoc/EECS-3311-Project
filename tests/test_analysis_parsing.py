@@ -108,3 +108,16 @@ def test_prompts_carry_framework_findings_and_grouped_passages():
     assert "Retrieved for theoretical background" in analysis.user
     assert "- relation: class | x [1]" in analysis.user
     assert "application: <concept>" in analysis.system
+
+
+def test_citations_removed_at_the_end_leave_no_stray_commas():
+    # A live analysis printed "socialism)," and "independence,,".
+    parsed = parse_analysis(
+        "claim: supported | movements (Chartism, socialism), [11, 5]\n"
+        "condition: production | superseding of small masters and family independence,, [13, 1]"
+    )
+
+    assert [i.text for i in parsed.items] == [
+        "movements (Chartism, socialism)",
+        "superseding of small masters and family independence",
+    ]
