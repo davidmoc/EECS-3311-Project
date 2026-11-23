@@ -127,7 +127,7 @@ def test_a_passage_link_opens_the_text_at_its_paragraph(gui):
     source = page.result.sources[0]
     link = f"praxis:read/{source.citation.document_id}/{source.citation.locator.lstrip('¶')}"
 
-    page._link_clicked(QUrl(link))
+    page.output.anchorClicked.emit(QUrl(link))
 
     library = window.page("Library")
     assert window.current_title == "Library"

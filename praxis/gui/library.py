@@ -32,6 +32,7 @@ from praxis.app import Application
 from praxis.documents import Annotation, AnnotationType, Document, Passage
 from praxis.gui import render
 from praxis.gui.tasks import TaskRunner, describe_error
+from praxis.gui.widgets import lock_while_busy
 from praxis.reader_model.events import DocumentRead
 from praxis.reader_model.personalization import RequestPreferences
 from praxis.reading import AnnotationResult
@@ -99,12 +100,6 @@ class ReadingController:
         return self._application.annotations.generate_annotation(
             document, document.paragraph(paragraph), annotation_type, profile
         )
-
-
-def lock_while_busy(runner: TaskRunner, *widgets: QWidget) -> None:
-    """Disable ``widgets`` while a request runs: they reach the database,
-    which the running request is using (see ``praxis.gui.tasks``)."""
-    runner.busy_changed.connect(lambda busy: [w.setEnabled(not busy) for w in widgets])
 
 
 class LibraryView(QWidget):

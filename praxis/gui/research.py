@@ -14,7 +14,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -22,14 +21,14 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
-    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
 
 from praxis.app import Application
-from praxis.gui import render, results
+from praxis.gui import results
 from praxis.gui.tasks import TaskRunner, describe_error
+from praxis.gui.widgets import OpenReading, result_browser
 from praxis.reader_model import ExplanationDepth, ReaderProfile
 from praxis.reader_model.personalization import RequestPreferences
 
@@ -106,14 +105,13 @@ class ResearchView(QWidget):
         self,
         controller: ResearchController,
         runner: TaskRunner,
-        open_reading: Callable[[str, int], None] | None = None,
+        open_reading: OpenReading | None = None,
     ) -> None:
         """``open_reading(document_id, paragraph)`` shows a text on the
         library page when a passage link is clicked."""
         super().__init__()
         self._controller = controller
         self._runner = runner
-        self._open_reading = open_reading
         self.result: Any = None
 
         self.mode_box = QComboBox()
@@ -142,9 +140,7 @@ class ResearchView(QWidget):
             options.addWidget(widget)
         options.addStretch()
 
-        self.output = QTextBrowser()
-        self.output.setOpenLinks(False)
-        self.output.anchorClicked.connect(self._link_clicked)
+        self.output = result_browser(open_reading)
         self.message = QLabel()
         self.message.setWordWrap(True)
 
@@ -203,8 +199,3 @@ class ResearchView(QWidget):
 
         self.message.setText("Working… model requests can take a minute.")
         self._runner.run(mode.label, lambda: method(text, preferences, **extra), done, failed)
-
-    def _link_clicked(self, url: QUrl) -> None:
-        target = render.parse_read_link(url.toString())
-        if target is not None and self._open_reading is not None:
-            self._open_reading(*target)

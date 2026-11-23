@@ -9,7 +9,8 @@ what is AI-generated, tentative or unchecked.
 from __future__ import annotations
 
 from praxis.agent import AgentResponse, ResponseStatus
-from praxis.gui.render import ai_heading, ai_text, escape, join, labels, line, read_link, sources, warnings
+from praxis.comparison import Comparability, SourceComparison
+from praxis.gui.render import SHOWN_PASSAGE_CHARS, ai_heading, ai_text, escape, join, labels, line, read_link, sources, warnings
 from praxis.reading import LearningPath, ReadingStatus, RecommendationResult
 from praxis.reading.prerequisites import StepStatus
 from praxis.reading.traditions import StatementKind, TraditionsComparison, TraditionsStatus
@@ -292,4 +293,49 @@ def learning_path(path: LearningPath) -> str:
         parts.append(f"*Learning path {str(path.id)[:8]}: record progress with "
                      f"`praxis path mark {str(path.id)[:8]} <step> done|known|skip`.*")
     parts.append(warnings(path.warnings, path.tokens_used))
+    return join(*parts)
+
+
+_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+def comparison(result: SourceComparison) -> str:
+    """F10: each source's passages, then what the AI found shared,
+    different, disputed and framed, each point naming whose passages."""
+    letters = {p.document_id: _LETTERS[i] for i, p in enumerate(result.profiles)}
+    parts = [f"## Comparing on: {escape(result.subject)}"]
+    for profile in result.profiles:
+        rows = [f"### Source {letters[profile.document_id]}: {escape(profile.describe())}"]
+        for source in result.passages_of(profile):
+            text = source.citation.quoted_text
+            if len(text) > SHOWN_PASSAGE_CHARS:
+                text = text[:SHOWN_PASSAGE_CHARS].rstrip() + " […]"
+            rows.append(f"**{escape(source.label)}** {escape(source.citation.locator)} — "
+                        f"{read_link(profile.document_id, source.citation.locator)}\n\n> {escape(text)}")
+        parts.append("\n\n".join(rows))
+    if result.comparability is not Comparability.UNKNOWN:
+        note = f" — {result.comparability_note}" if result.comparability_note else ""
+        parts.append(f"**Comparability (AI-assessed):** {escape(result.comparability.value + note)}")
+
+    def owners(evidence: tuple[int, ...]) -> str:
+        names = dict.fromkeys(
+            letters.get(profile.document_id, "?")
+            for profile in (result.source_of(n) for n in evidence) if profile is not None
+        )
+        return f" (source{'s' if len(names) > 1 else ''} {', '.join(names)})" if names else ""
+
+    for title, points in (
+        ("Shared ground (AI-generated)", result.similarities),
+        ("Differences in treatment (AI-generated)", result.differences),
+        ("Factual disagreements (AI-generated; check the passages)", result.disagreements),
+        ("Observations on framing (AI interpretation, not established fact)", result.observations),
+    ):
+        if points:
+            parts.append(f"**{title}**\n\n" + "\n".join(
+                line((f"{p.aspect}: " if p.aspect else "") + p.description, p.evidence) + escape(owners(p.evidence))
+                for p in points
+            ))
+    if result.uncertainties:
+        parts.append("**Could not be verified from these passages**\n\n" + "\n".join(line(u) for u in result.uncertainties))
+    parts.append(warnings(result.warnings, result.tokens_used))
     return join(*parts)

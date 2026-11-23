@@ -26,8 +26,8 @@ from PySide6.QtWidgets import (
 )
 
 from praxis.app import Application
-from praxis.gui.library import lock_while_busy
 from praxis.gui.tasks import TaskRunner, describe_error
+from praxis.gui.widgets import lock_while_busy
 from praxis.reader_model import ExplanationDepth, KnowledgeArea, KnowledgeLevel, ReaderProfile
 
 SPARSE = (
