@@ -1,0 +1,12 @@
+<!--?xml version="1.0" encoding="UTF-8"?-->
+<!-- Praxis's qt-material theme: the red, black and cream of constructivist
+     posters. Light theme, so apply it with invert_secondary=True. -->
+<resources>
+  <color name="primaryColor">#b71c1c</color>
+  <color name="primaryLightColor">#e53935</color>
+  <color name="secondaryColor">#f3ecdc</color>
+  <color name="secondaryLightColor">#fbf7ee</color>
+  <color name="secondaryDarkColor">#e2d6bd</color>
+  <color name="primaryTextColor">#1a1a1a</color>
+  <color name="secondaryTextColor">#1a1a1a</color>
+</resources>

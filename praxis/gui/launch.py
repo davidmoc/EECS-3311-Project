@@ -18,6 +18,7 @@ from praxis.gui.profile import ProfileController, ProfileView
 from praxis.gui.research import ResearchController, ResearchView
 from praxis.gui.sessions import SessionsController, SessionsView
 from praxis.gui.tasks import TaskRunner, ThreadTaskRunner
+from praxis.gui.theme import apply_theme
 from praxis.gui.workspace import Resume, WorkspaceController, WorkspaceView
 from praxis.persistence import Database
 
@@ -60,6 +61,7 @@ def run(argv: list[str] | None = None) -> int:
     database = Database(settings.database_path, shared_with_worker=True)
     application = build_application(settings, database)
     qt = QApplication.instance() or QApplication(argv if argv is not None else sys.argv)
+    apply_theme(qt)
     runner = ThreadTaskRunner()
     window = build_window(application, runner)
     window.show()

@@ -538,7 +538,7 @@ API key and no network access.
 | `praxis/llm/` | `LLMClient` interface and the OpenAI adapter |
 | `praxis/persistence/` | SQLite database and repositories |
 | `praxis/cli/` | Typer command-line interface |
-| `praxis/gui/` | PySide6 graphical interface: main window, views and their controllers, task runner |
+| `praxis/gui/` | PySide6 graphical interface: main window, views and their controllers, task runner, qt-material theme |
 | `praxis/config.py` | Local settings and API-key handling |
 | `data/library/` | Bundled public-domain texts and their catalogue |
 | `data/news/feeds.json` | The news feeds `news refresh` reads |

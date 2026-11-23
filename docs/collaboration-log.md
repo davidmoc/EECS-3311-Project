@@ -496,3 +496,12 @@ platform.openai.com.
 - **Problems met:** The old README said `pip install -e .` gives a `praxis` command; it fails, because setuptools finds several top-level folders and `pyproject.toml` does not name the package. The README now uses `python -m praxis` throughout; `pyproject.toml` was not changed.
 - **Human contribution:** Requested the change.
 - **Outcome:** One documentation commit.
+
+### 2026-11-22 — GUI theme
+
+- **Task:** Make the GUI look better with a ready-made theme library.
+- **Input/Instruction:** The user asked for a ready-made Qt theme library, styled in keeping with Marxist aesthetics.
+- **AI contribution:** Added `qt-material` (to `requirements.txt`) and a custom light theme, `praxis/gui/praxis_theme.xml`: constructivist red (`#b71c1c`) on cream paper (`#f3ecdc`) with near-black text. `praxis/gui/theme.py` applies it at launch (`launch.run`). The pages were rendered offscreen to images and looked at. 793 automated tests pass.
+- **Problems met:** qt-material draws a selected row's text in the theme's dark text colour, which is hard to read on the red selection. Overriding it with `color` or a widget-level `selection-color` had no effect; testing qt-material's rules one at a time showed its `QListView::item:selected:focus` rule wins, and Qt takes a selected item's text colour from `selection-color` on the item rule. `theme.py` adds that rule, giving cream text on red.
+- **Human contribution:** Chose the library approach and the aesthetic.
+- **Outcome:** One code commit with this log entry.
