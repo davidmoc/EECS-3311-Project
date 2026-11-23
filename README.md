@@ -90,6 +90,10 @@ python -m praxis news list --days 2
 python -m praxis news list --outlet guardian
 python -m praxis library read 5ce83d9c        # an article's feed summary
 
+# Reading recommendations (F07): ranked library texts, each with why
+python -m praxis recommend "the state"
+python -m praxis recommend                     # from your strongest interests
+
 # Source and framing comparison (F10): two to four texts, on one subject
 python -m praxis compare b67c02e1 abdc2552 --on "the peasantry"
 python -m praxis compare 59983f05:20-22 abdc2552:61,66   # named paragraphs
@@ -198,6 +202,15 @@ report is from today or yesterday is marked as still developing.
 `--research` starts a research session whose first sources are the
 event's reports. `--save` keeps the event in the workspace.
 
+`recommend` searches the library's passages for the topic (news is left
+out), ranks texts the catalogue tags with the topic ahead of texts that
+only match its words, and asks the model to rank up to five of them with a
+reason and a difficulty. Texts you have finished go last; your progress is
+shown beside each. The model may also name well-known works the library
+lacks; these are marked as not checked. Without a model the texts are
+ranked by matching passages. When little is known about you, or
+personalization is off, you are told the ranking rests on the topic alone.
+
 Reading with `library read` updates your reading progress, interests and
 inferred knowledge automatically; `profile know` always overrides inference.
 
@@ -225,7 +238,7 @@ API key and no network access.
 | `praxis/llm/` | `LLMClient` interface and the OpenAI adapter |
 | `praxis/persistence/` | SQLite database and repositories |
 | `praxis/research/` | Research session, commands, plan, planner, concrete situation, assessment method, stopping policy |
-| `praxis/reading/` | `AnnotationService` (F06) |
+| `praxis/reading/` | `AnnotationService` (F06), `RecommendationService` (F07) |
 | `praxis/reader_model/` | Reader profile, its service, event bus and updater |
 | `praxis/tools/` | Agent tools, tool manager and tool factory |
 | `praxis/workspace/` | Saved items, workspace and its service |

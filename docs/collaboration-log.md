@@ -291,3 +291,24 @@ platform.openai.com.
   - `--research` and `--compare` replace the expanded view rather than following it, so one command makes at most one kind of model work.
 - **Human contribution:** None on this slice yet; the code has not been reviewed.
 - **Outcome:** Seven code commits and this documentation commit.
+
+### 2026-11-22 — Intelligent reading recommendations (F07)
+
+- **Task:** Implement F07 (UC07, SD05's `recommendReadings`): recommend library texts for a topic or for the reader's interests, ranked, each with why.
+- **Input/Instruction:** "do the next 5 slices of praxis".
+- **AI contribution:** Planned the five slices from the features with no code yet: F07, F08 in two slices (building a learning path, then keeping it with progress), F09, then F11. Added `RECOMMENDATION_RULES` and `PromptBuilder.build_recommendation_prompt`, and the module `praxis/reading/recommendations.py`: `Recommendation`, `ExternalSuggestion`, `ReadingStatus`, `RecommendationResult`, `parse_recommendations` and `RecommendationService` (`recommend_readings(topic, profile)`, `recommend_next(profile)`). In the CLI: `praxis recommend [TOPIC]`. 600 automated tests. Two live runs against `gpt-5-mini` on a scratch database whose reader had read 37% of *Revolution and Counter-Revolution*:
+  - `recommend "the state"` (37 s, 4,413 tokens): the *Brumaire*, *Revolution and Counter-Revolution* and the Manifesto, with two works outside the library (*On the Jewish Question*, *The State and Revolution*). Phrases its reasons quoted were checked and are in the cited paragraphs: "by far the most important" (¶102 of *Revolution and Counter-Revolution*), "in the hands of the State" (¶139 of the Manifesto), "framing of a republican constitution" and "state of siege" (¶55 of the *Brumaire*), and the State's "supervision" of education (¶59).
+  - `recommend` with no topic (40 s, 3,509 tokens) used the three strongest interests (1848, bourgeoisie, germany) and ranked the partly read *Revolution and Counter-Revolution* first. Its paragraph references were checked: "German workers" and "recognition" (¶216 of the Manifesto), 1848 (¶19) and Bismarck (¶22) in *The Condition of the Working-Class*, and Vienna (¶193 of *Revolution and Counter-Revolution*).
+- **Problems met:**
+  - Without a model, `recommend imperialism` ranked *Revolution and Counter-Revolution* above Lenin's letter: the index stems "imperialism" so that it matches "Imperial" (the Imperial Diet and army). Texts the catalogue tags with the topic now come first. Fixed in its own commit (`8862a95`), with a regression test confirmed to fail before the fix.
+  - In the first live run every reason repeated "you have not opened it", which the command already prints. The prompt now says not to restate progress (own commit). In the second run one reason still mentioned the 37% as the reason to continue, which is a fair use.
+  - A word match is not always about the topic: "the state" matched the *Brumaire*'s "state of siege". The model's reason quoted it as if it were about the State. Not changed; the same keyword search serves F04 and F03.
+- **Design changes from Stage 1 introduced here:**
+  - SD05's `LibraryService.search(topic)` is the `passage_search` tool: texts are found by their passages, which also gives the reader paragraphs to start from. `RecommendationService` takes the `ToolManager`, not `LibraryService`. News articles are not recommended.
+  - SD05's "evaluate relevance/difficulty" is one model call. The model replies in a fixed line format (`recommend: [n] | <difficulty> | <why>`, `external: <title> | <author> | <why>`); up to 8 candidates are shown and up to 5 recommended. Numbers the model invents are ignored with a warning. Without a model, or if it fails or replies in another form, texts are ranked by matching passages and the reader is told.
+  - UC07 step 4 ("previously completed … readings are deprioritized") is done in code after the model's ranking: finished texts go last. The reader's progress in each text comes from the reading history.
+  - UC07's "external source recommendations" are the model's `external:` lines, shown under their own heading as not checked. There is no web search to verify them.
+  - F07's "should not imply that a recommendation is personalized when insufficient user information exists": the reader profile is sent only when `reader_context` allows it, and a sparse profile or personalization turned off produces a warning that the ranking rests on the topic alone. `recommend_next` (no topic) needs personalization on and at least one interest.
+  - `ReadingController`/`ReaderView` are played by `praxis recommend`. Saving or opening a recommended text uses the existing `workspace save-text` and `library read` commands, which the output names. Recommendations are not stored.
+- **Human contribution:** Asked for the next five slices. The code has not been reviewed yet.
+- **Outcome:** Five code commits and this documentation commit.
