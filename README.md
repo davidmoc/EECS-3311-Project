@@ -129,6 +129,11 @@ python -m praxis profile know "surplus value" introductory
 python -m praxis profile interest imperialism
 python -m praxis profile depth detailed
 
+# Personalized assistance (F14): explanations use what you know of the topic;
+# override it for one request without changing your profile
+python -m praxis ask "Where does surplus value come from?" --detail brief
+python -m praxis research "the state in 1848" --general   # not adapted to you
+
 # Workspace (F15): save and resume
 python -m praxis workspace save-passage 59983f05 14 --note "key thesis"
 python -m praxis workspace list
@@ -277,6 +282,15 @@ the traditions disagree (citing passages from both sides), and the Marxist
 assessment of the others, kept apart from their own positions. Each
 tradition's texts are listed to read in its own words.
 
+Explanations are adapted to your reader profile (F14): what you are
+recorded as knowing about the request's own topic is put first, and if
+nothing is recorded the model is told not to assume you know it. Inferred
+knowledge is described to the model as a guess. When little is known about
+you, or personalization is off, answers stay general. `--detail
+brief|standard|detailed` (on `ask`, `research`, `sessions continue` and
+`annotate`) and `--general` (on those and on `history`, `analyze`,
+`traditions` and `recommend`) apply to one request only.
+
 Reading with `library read` updates your reading progress, interests and
 inferred knowledge automatically; `profile know` always overrides inference.
 
@@ -305,7 +319,7 @@ API key and no network access.
 | `praxis/persistence/` | SQLite database and repositories |
 | `praxis/research/` | Research session, commands, plan, planner, concrete situation, assessment method, stopping policy, historical context (F09), Marxist analysis (F11) |
 | `praxis/reading/` | `AnnotationService` (F06), `RecommendationService` (F07), `PrerequisiteService` and `LearningPath` (F08), `IdeologicalContextService` (F12) |
-| `praxis/reader_model/` | Reader profile, its service, event bus and updater |
+| `praxis/reader_model/` | Reader profile, its service, event bus and updater, `PersonalizationService` (F14) |
 | `praxis/tools/` | Agent tools, tool manager and tool factory |
 | `praxis/workspace/` | Saved items, workspace and its service |
 | `data/library/` | Bundled public-domain texts and their catalogue |
