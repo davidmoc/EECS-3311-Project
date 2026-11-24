@@ -28,6 +28,7 @@ platform.openai.com.
 | 2026-11-22 | 98k output | $10.72 | _from OpenAI usage page_ | Source comparison (F10, two slices), news dashboard (F01, two slices), event exploration (F02); live-run fixes |
 | 2026-11-22 | 173k output | $14.42 | _from OpenAI usage page_ | Recommendations (F07), learning paths (F08, two slices), historical context (F09), Marxist analysis (F11); live-run fixes; nine more library texts |
 | 2026-11-22 | 185k output | $15.32 | _from OpenAI usage page_ | Comparison of leftist traditions (F12), personalized assistance (F14), graphical interface (three slices); live-run fixes; review records |
+| 2026-11-22 | 16k output | $1.00 | $0 | README rewrite: quick start, feature map, task-grouped command reference |
 
 ## Interactions
 
