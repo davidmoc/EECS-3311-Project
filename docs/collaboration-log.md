@@ -18,7 +18,7 @@ platform.openai.com.
 
 | Date | Claude Code tokens | Claude Code cost | OpenAI app cost | Work done |
 |---|---|---|---|---|
-| 2026-11-16 | 5.7m | $5.90 | $0 | Design review, stack and scope decisions, foundation layers |
+| 2026-11-16 | 5.7m | $6.27 | $0 | Design review, stack and scope decisions, foundation layers |
 | 2026-11-18 | _from `/cost`_ | _from `/cost`_ | $0 | Library, reader model, workspace, CLI |
 | 2026-11-19 | _from `/cost`_ | _from `/cost`_ | _from OpenAI usage page_ | Source-first question answering (F04) |
 
