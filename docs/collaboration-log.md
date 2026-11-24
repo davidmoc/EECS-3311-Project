@@ -21,6 +21,7 @@ platform.openai.com.
 | 2026-11-16 | 47k | $6.27 | $0 | Design review, stack and scope decisions, foundation layers |
 | 2026-11-18 | 88k output | $7.76 | $0 | Library, reader model, workspace, CLI; trace-found fixes (Nov 19) |
 | 2026-11-19 | 57k output | $4.65 | _from OpenAI usage page_ | Source-first question answering (F04); trace-found fixes (Nov 21) |
+| 2026-11-21 | 60k output | $4.64 | _from OpenAI usage page_ | Multi-step research agent, first slice (F03) |
 
 ## Interactions
 
@@ -128,7 +129,7 @@ platform.openai.com.
   - `ResearchSession` also records each step, model calls, tokens and warnings, so the result can show how the research was done.
   - No `ConcreteSituation`, `DialecticalMaterialistResearchMethod` or `MaterialistAnalysis` yet. The synthesis is one model call that writes fixed sections (findings, historical context, theoretical connections, open questions), with open questions split out. As with F04, sources are returned with a warning when the model fails, rather than only an error.
   - `ResearchResult.getRecommendedReadings()` returns the texts behind the cited sources.
-- **Human contribution:** Reviewed the code and approved it ("i reviewed the code, its good").
+- **Human contribution:** Reviewed the code.
 - **Outcome:** Eight code commits and this documentation commit, pushed to `main`.
 
 ### 2026-11-21 — Multi-step research agent, second slice: assessment and plan revision (F03)
