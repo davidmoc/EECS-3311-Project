@@ -23,6 +23,7 @@ platform.openai.com.
 | 2026-11-19 | 57k output | $4.65 | _from OpenAI usage page_ | Source-first question answering (F04); trace-found fixes (Nov 21) |
 | 2026-11-21 | 60k output | $4.64 | _from OpenAI usage page_ | Multi-step research agent, first slice (F03) |
 | 2026-11-21 | 73k output | $4.70 | _from OpenAI usage page_ | Multi-step research agent, second slice (F03); citation prompt fix; review records |
+| 2026-11-21 | 63k output | $6.62 | _from OpenAI usage page_ | Multi-step research agent, third slice (F03): stored and continued research; focus-first fix; research call trace |
 
 ## Interactions
 
