@@ -31,6 +31,7 @@ platform.openai.com.
 | 2026-11-22 | 16k output | $1.00 | $0 | README rewrite: quick start, feature map, task-grouped command reference |
 | 2026-11-23 | 87k output | $7.84 | $0 | GUI overhaul: home page (news, unfinished readings, learning path) and full-height reader with inline annotations |
 | 2026-11-23 | 57k output | $3.68 | _from OpenAI usage page_ | Finding texts beyond the library: web search and Wikipedia discovery for research, questions, history, analysis and learning paths |
+| 2026-11-23 | 53k output | $3.73 | $0 | Structured result panes: rich-text research, news, learning-path, history, analysis and comparison results; news cards; inline step actions |
 
 ## Interactions
 
