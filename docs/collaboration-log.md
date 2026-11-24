@@ -8,7 +8,7 @@ reviewed; where review has not happened yet, it says so.
 
 | Tool | LLM model | Purpose | Token / money cost |
 |---|---|---|---|
-| Claude Code (CLI) | Claude Fable 5.2 (`claude-fable-5-2`) on 2026-11-16; Claude Opus 5.5 (`claude-opus-5-5`) from 2026-11-18 to 2026-11-23 | Design review, code generation, tests | _to be filled from `/cost` at the end of each session_ |
+| Claude Code (CLI) | Claude Fable 5.2 (`claude-fable-5-2`) on 2026-11-16; Claude Opus 5.5 (`claude-opus-5-5`) from 2026-11-18 to 2026-11-23 | Design review, code generation, tests | $96.49 over 14 sessions (per-session list below) |
 
 ### Cost per session
 
@@ -20,18 +20,29 @@ platform.openai.com.
 |---|---|---|---|---|
 | 2026-11-16 | 47k | $6.27 | $0 | Design review, stack and scope decisions, foundation layers |
 | 2026-11-18 | 88k output | $7.76 | $0 | Library, reader model, workspace, CLI; trace-found fixes (Nov 19) |
-| 2026-11-19 | 57k output | $4.65 | _from OpenAI usage page_ | Source-first question answering (F04); trace-found fixes (Nov 21) |
-| 2026-11-21 | 60k output | $4.64 | _from OpenAI usage page_ | Multi-step research agent, first slice (F03) |
-| 2026-11-21 | 73k output | $4.70 | _from OpenAI usage page_ | Multi-step research agent, second slice (F03); citation prompt fix; review records |
-| 2026-11-21 | 63k output | $6.62 | _from OpenAI usage page_ | Multi-step research agent, third slice (F03): stored and continued research; focus-first fix; research call trace |
-| 2026-11-22 | 56k output | $5.14 | _from OpenAI usage page_ | AI-annotated reading, first slice (F06); unseen-paragraph and list-display fixes |
-| 2026-11-22 | 98k output | $10.72 | _from OpenAI usage page_ | Source comparison (F10, two slices), news dashboard (F01, two slices), event exploration (F02); live-run fixes |
-| 2026-11-22 | 173k output | $14.42 | _from OpenAI usage page_ | Recommendations (F07), learning paths (F08, two slices), historical context (F09), Marxist analysis (F11); live-run fixes; nine more library texts |
-| 2026-11-22 | 185k output | $15.32 | _from OpenAI usage page_ | Comparison of leftist traditions (F12), personalized assistance (F14), graphical interface (three slices); live-run fixes; review records |
+| 2026-11-19 | 57k output | $4.65 | see daily list below | Source-first question answering (F04); trace-found fixes (Nov 21) |
+| 2026-11-21 | 60k output | $4.64 | see daily list below | Multi-step research agent, first slice (F03) |
+| 2026-11-21 | 73k output | $4.70 | see daily list below | Multi-step research agent, second slice (F03); citation prompt fix; review records |
+| 2026-11-21 | 63k output | $6.62 | see daily list below | Multi-step research agent, third slice (F03): stored and continued research; focus-first fix; research call trace |
+| 2026-11-22 | 56k output | $5.14 | see daily list below | AI-annotated reading, first slice (F06); unseen-paragraph and list-display fixes |
+| 2026-11-22 | 98k output | $10.72 | see daily list below | Source comparison (F10, two slices), news dashboard (F01, two slices), event exploration (F02); live-run fixes |
+| 2026-11-22 | 173k output | $14.42 | see daily list below | Recommendations (F07), learning paths (F08, two slices), historical context (F09), Marxist analysis (F11); live-run fixes; nine more library texts |
+| 2026-11-22 | 185k output | $15.32 | see daily list below | Comparison of leftist traditions (F12), personalized assistance (F14), graphical interface (three slices); live-run fixes; review records |
 | 2026-11-22 | 16k output | $1.00 | $0 | README rewrite: quick start, feature map, task-grouped command reference |
 | 2026-11-23 | 87k output | $7.84 | $0 | GUI overhaul: home page (news, unfinished readings, learning path) and full-height reader with inline annotations |
-| 2026-11-23 | 57k output | $3.68 | _from OpenAI usage page_ | Finding texts beyond the library: web search and Wikipedia discovery for research, questions, history, analysis and learning paths |
+| 2026-11-23 | 57k output | $3.68 | see daily list below | Finding texts beyond the library: web search and Wikipedia discovery for research, questions, history, analysis and learning paths |
 | 2026-11-23 | 53k output | $3.73 | $0 | Structured result panes: rich-text research, news, learning-path, history, analysis and comparison results; news cards; inline step actions |
+
+OpenAI reports usage per day, not per session, so the application's own
+cost is listed by day (total $1.31):
+
+| Date | OpenAI app cost |
+|---|---|
+| 2026-11-19 and before | $0 |
+| 2026-11-20 | <$0.01 |
+| 2026-11-21 | $0.01 |
+| 2026-11-22 | $0.21 |
+| 2026-11-23 | $1.09 |
 
 ## Interactions
 
