@@ -30,6 +30,7 @@ platform.openai.com.
 | 2026-11-22 | 185k output | $15.32 | _from OpenAI usage page_ | Comparison of leftist traditions (F12), personalized assistance (F14), graphical interface (three slices); live-run fixes; review records |
 | 2026-11-22 | 16k output | $1.00 | $0 | README rewrite: quick start, feature map, task-grouped command reference |
 | 2026-11-23 | 87k output | $7.84 | $0 | GUI overhaul: home page (news, unfinished readings, learning path) and full-height reader with inline annotations |
+| 2026-11-23 | 57k output | $3.68 | _from OpenAI usage page_ | Finding texts beyond the library: web search and Wikipedia discovery for research, questions, history, analysis and learning paths |
 
 ## Interactions
 
