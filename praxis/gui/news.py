@@ -13,6 +13,7 @@ from typing import Any
 from uuid import UUID
 
 from PySide6.QtWidgets import (
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -131,10 +132,12 @@ class NewsView(QWidget):
         )
         self.save_button = QPushButton("Save to workspace")
         self.save_button.clicked.connect(self.save)
-        actions = QHBoxLayout()
-        for button in (self.research_button, self.compare_button, self.history_button, self.save_button):
-            actions.addWidget(button)
-        actions.addStretch()
+        # Two rows of two: in one row the buttons made the window wider
+        # than a laptop screen.
+        actions = QGridLayout()
+        for index, button in enumerate((self.research_button, self.compare_button,
+                                        self.history_button, self.save_button)):
+            actions.addWidget(button, index // 2, index % 2)
         self.message = QLabel()
         self.message.setWordWrap(True)
 

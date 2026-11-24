@@ -110,6 +110,11 @@ class LibraryView(QWidget):
         self.search_box.setPlaceholderText("Search the library…")
         self.search_box.returnPressed.connect(self.search)
         self.topic_box = QComboBox()
+        # Sized to a fixed length, not to the longest topic: by default a
+        # combo box widens to fit its longest item, and one long topic
+        # name made the window wider than the screen.
+        self.topic_box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.topic_box.setMinimumContentsLength(16)
         self.topic_box.currentIndexChanged.connect(self.filter_by_topic)
         filters = QHBoxLayout()
         filters.addWidget(self.search_box, stretch=3)
