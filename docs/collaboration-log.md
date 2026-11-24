@@ -8,7 +8,7 @@ reviewed; where review has not happened yet, it says so.
 
 | Tool | LLM model | Purpose | Token / money cost |
 |---|---|---|---|
-| Claude Code (CLI) | Claude Fable 5.2 (`claude-fable-5-2`) on 2026-11-16; Claude Opus 5.5 (`claude-opus-5-5`) on 2026-11-18 and 2026-11-19 | Design review, code generation, tests | _to be filled from `/cost` at the end of each session_ |
+| Claude Code (CLI) | Claude Fable 5.2 (`claude-fable-5-2`) on 2026-11-16; Claude Opus 5.5 (`claude-opus-5-5`) from 2026-11-18 to 2026-11-21 | Design review, code generation, tests | _to be filled from `/cost` at the end of each session_ |
 
 ### Cost per session
 
@@ -20,7 +20,7 @@ platform.openai.com.
 |---|---|---|---|---|
 | 2026-11-16 | 47k | $6.27 | $0 | Design review, stack and scope decisions, foundation layers |
 | 2026-11-18 | 88k output | $7.76 | $0 | Library, reader model, workspace, CLI; trace-found fixes (Nov 19) |
-| 2026-11-19 | _from `/cost`_ | _from `/cost`_ | _from OpenAI usage page_ | Source-first question answering (F04) |
+| 2026-11-19 | 57k output | $4.65 | _from OpenAI usage page_ | Source-first question answering (F04); trace-found fixes (Nov 21) |
 
 ## Interactions
 
