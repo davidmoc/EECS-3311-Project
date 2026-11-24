@@ -26,6 +26,7 @@ platform.openai.com.
 | 2026-11-21 | 63k output | $6.62 | _from OpenAI usage page_ | Multi-step research agent, third slice (F03): stored and continued research; focus-first fix; research call trace |
 | 2026-11-22 | 56k output | $5.14 | _from OpenAI usage page_ | AI-annotated reading, first slice (F06); unseen-paragraph and list-display fixes |
 | 2026-11-22 | 98k output | $10.72 | _from OpenAI usage page_ | Source comparison (F10, two slices), news dashboard (F01, two slices), event exploration (F02); live-run fixes |
+| 2026-11-22 | 173k output | $14.42 | _from OpenAI usage page_ | Recommendations (F07), learning paths (F08, two slices), historical context (F09), Marxist analysis (F11); live-run fixes; nine more library texts |
 
 ## Interactions
 
